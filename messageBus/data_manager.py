@@ -46,8 +46,8 @@ class ShipStatus(enum.Enum):
 class DataManager:
     def __init__(self, ship_id, tcp_server_obj):
         # 日志对象
-        self.logger = LogHandler('data_manager_log', level=20)
-        self.server_log = LogHandler('server_data', level=20)
+        self.logger = LogHandler('data_manager_log_%d' % ship_id, level=20)
+        self.server_log = LogHandler('server_data%d' % ship_id, level=20)
         self.ship_id = ship_id
         self.ship_code = 'XXLJC4LCGSCSD1DA00' + str(ship_id)
         self.data_define_obj = data_define.DataDefine(self.ship_code)
@@ -158,7 +158,6 @@ class DataManager:
         self.b_need_stop_draw = 0  # 是否需要发送停止抽水
         self.pre_control_data = None  # 记录上一次发送的运动控制消息防重发(运动控制消息不发送确认)
         self.server_data_obj_dict = {}  # 船号对应mqtt服务字典
-
 
     def thread_control(self):
         # 通用调用函数
@@ -1446,4 +1445,3 @@ class DataManager:
                                                                        ShipStatus.at_home]:
             self.logger.info({"正在返航": return_ship_status})
         return return_ship_status
-

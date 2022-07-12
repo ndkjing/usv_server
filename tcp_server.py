@@ -40,7 +40,7 @@ class TcpServer:
         self.ship_detect_data_dict = {}  # 船检测数据
         self.ship_obstacle_data_dict = {}  # 船检测数据
         self.receive_confirm_data = ""
-        self.disconnect_client_list = [] # 断线了的船号
+        self.disconnect_client_list = []  # 断线了的船号
 
     def wait_connect(self):
         # 等待客户连接，连接成功后，将socket对象保存到client，将细节数据等保存到addr
@@ -72,15 +72,15 @@ class TcpServer:
                     ship_id_list = re.findall('[ABCD](\d+)', recv_content)
                     if len(ship_id_list) > 0:
                         ship_id = int(ship_id_list[0])
-                        if not ship_id in self.client_dict:
-                            self.client_dict.update({ship_id: client})
-                        if not ship_id in addr_dict:
-                            addr_dict.update({addr: ship_id})
-                        if ship_id in self.disconnect_client_list:
-                            self.disconnect_client_list.remove(ship_id)
                         if recv_content.startswith('A'):
                             rec_list = recv_content.split(',')
                             if len(rec_list) >= 6:
+                                if ship_id not in self.client_dict:
+                                    self.client_dict.update({ship_id: client})
+                                if ship_id not in addr_dict:
+                                    addr_dict.update({addr: ship_id})
+                                if ship_id in self.disconnect_client_list:
+                                    self.disconnect_client_list.remove(ship_id)
                                 lng = float(rec_list[1]) / 1000000.0
                                 lat = float(rec_list[2]) / 1000000.0
                                 dump_energy = round(float(rec_list[3]), 1)
@@ -128,7 +128,7 @@ class TcpServer:
                                     {ship_id: {obj_id: [obj_angle, obj_distance]}})
                                 # print('障碍物检测反馈消息', recv_content.strip())
                     else:
-                        print('接收客户端的确认数据:%s\r\n' % recv_content.strip())
+                        print(time.time(),'接收客户端的确认数据:%s\r\n' % recv_content.strip())
                         self.receive_confirm_data = recv_content.strip()
             except TimeoutError or WindowsError or 10054 as e:
                 print(' WindowsError', e)
@@ -137,27 +137,17 @@ class TcpServer:
             except Exception as e:
                 print('tcp接受数据报错..', e)
                 print(addr_dict, addr_dict.get(addr))
-                print('断开连接删除船只:%d\r\n' % addr_dict.get(addr))
-                if addr_dict.get(addr) not in self.disconnect_client_list:
-                    self.disconnect_client_list.append(addr_dict.get(addr))
-                if addr_dict.get(addr) in self.client_dict:
-                    del self.client_dict[addr_dict.get(addr)]
+                if addr_dict.get(addr):
+                    print('断开连接删除船只:%d\r\n' % addr_dict.get(addr))
+                    if addr_dict.get(addr) not in self.disconnect_client_list:
+                        self.disconnect_client_list.append(addr_dict.get(addr))
+                    if addr_dict.get(addr) in self.client_dict:
+                        del self.client_dict[addr_dict.get(addr)]
                 time.sleep(5)
                 return
 
     def close(self):
         self.tcp_server_socket.close()
-
-    # def write_data(self,client,data):
-    #     try:
-    #         if data != 'S8Z':
-    #             print('tcp发送数据%s\r\n' % data)
-    #         # print('tcp发送数据', data, self.client_dict)
-    #         client.send(data.encode())
-    #     # except ConnectionAbortedError or ConnectionResetError or ConnectionResetError as e:
-    #     except Exception as e:
-    #         del self.client_dict[ship_id]
-    #         print('tcp发送收据报错..', e)
 
     def write_data(self, ship_id, data):
         try:

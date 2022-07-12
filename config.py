@@ -283,7 +283,6 @@ def update_height_setting():
                     print({'error': e})
             if height_setting_data.get('left_motor_cw') is not None:
                 try:
-                    print('left_motor_cw', height_setting_data.get('left_motor_cw'))
                     left_motor_cw = int(height_setting_data.get('left_motor_cw'))
                 except Exception as e:
                     print({'error': e})
@@ -313,7 +312,6 @@ def update_height_setting():
             if height_setting_data.get('obstacle_avoid_type') is not None:
                 try:
                     s_obstacle_avoid_type = int(height_setting_data.get('obstacle_avoid_type'))
-                    print('s_obstacle_avoid_type', s_obstacle_avoid_type)
                     if s_obstacle_avoid_type in [0, 1, 2, 3, 4]:
                         pass
                     else:

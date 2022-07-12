@@ -19,6 +19,7 @@ class CrawlWaterData:
     """
     抓取水质数据
     """
+
     def __init__(self):
         self.base_url = 'http://106.37.208.243:8068/GJZ/Ajax/Publish.ashx?PageIndex=1&PageSize=60&action=getRealDatas&AreaID='
 
@@ -33,8 +34,13 @@ class CrawlWaterData:
             area_id = 420100
             # area_id = 420000
         url = self.base_url + str(area_id)
-        print('请求水质数据')
-        html = requests.post(url, headers=headers)
+        try:
+            print('请求水质数据')
+            html = requests.post(url, headers=headers)
+            print('请求水质数据返回：', json.loads(html.content))
+        except Exception as e:
+            print('请求水质数据报错', e)
+            return None
         json_data = json.loads(html.content)
         if json_data.get('tbody'):
             return_data_dict.update({'省份': json_data.get('tbody')[0][0]})
@@ -50,7 +56,7 @@ class CrawlWaterData:
         count = 0
         for data_list in json_data.get('tbody'):
             count += 1
-            if len(re.findall('>(.*)<', data_list[5]))>0:
+            if len(re.findall('>(.*)<', data_list[5])) > 0:
                 wt = float(re.findall('>(.*)<', data_list[5])[0])
                 wt_list.append(wt)
             if len(re.findall('>(.*)<', data_list[6])) > 0:

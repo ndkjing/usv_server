@@ -26,6 +26,9 @@ def main():
     while True:
         for ship_id in list(main_obj.tcp_server_obj.client_dict.keys()):
             if ship_id not in main_obj.damanager_dict:
+                print('ship_id', ship_id)
+                if 'XXLJC4LCGSCSD1DA00' + str(ship_id) not in config.ship_code_type_dict:
+                    continue
                 main_obj.damanager_dict[ship_id] = data_manager.DataManager(ship_id=ship_id,
                                                                             tcp_server_obj=main_obj.tcp_server_obj)
                 ship_thread = threading.Thread(target=main_obj.damanager_dict[ship_id].thread_control)
@@ -34,7 +37,7 @@ def main():
         for ship_id in ship_thread_dict:
             if not ship_thread_dict.get(ship_id).is_alive():
                 if ship_id in list(main_obj.damanager_dict.keys()):
-                    print('删除船号对象',ship_id)
+                    print('删除船号对象', ship_id)
                     del main_obj.damanager_dict[ship_id]
         time.sleep(1)
 

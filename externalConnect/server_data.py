@@ -350,6 +350,11 @@ class MqttSendGet:
                             send_info = "点击采样"
                         else:
                             self.b_draw = 0
+                    elif self.ship_type == config.ShipType.water_detect:
+                        self.b_draw = int(switch_data.get('b_draw'))
+                        self.draw_deep = 0.5
+                        self.draw_capacity = 1000
+                        self.draw_bottle_id = 5
                     elif self.ship_type == config.ShipType.multi_draw_detect:
                         self.b_draw = int(switch_data.get('b_draw'))
                         if self.draw_bottle_id == 5:
