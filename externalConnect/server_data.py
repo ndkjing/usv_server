@@ -233,6 +233,12 @@ class MqttSendGet:
             copyfile(config.base_setting_path,self.base_setting_path)
         if not os.path.exists(self.height_setting_path):
             copyfile(config.height_setting_path, self.height_setting_path)
+        self.obstacle_avoid_type = config.obstacle_avoid_type
+        self.pre_obstacle_avoid_type = config.obstacle_avoid_type
+        self.network_backhome = config.network_backhome
+        self.pre_network_backhome = config.network_backhome
+        self.energy_backhome = config.energy_backhome
+        self.pre_energy_backhome = config.energy_backhome
 
     # 连接MQTT服务器
     def mqtt_connect(self, ):
@@ -557,6 +563,34 @@ class MqttSendGet:
                         with open(self.height_setting_path, 'w') as f2:
                             self.height_setting_data.update(height_setting_data)
                             json.dump(self.height_setting_data, f2)
+                            if self.height_setting_data.get('network_backhome') is not None:
+                                try:
+                                    s_network_backhome = int(height_setting_data.get('network_backhome'))
+                                    if s_network_backhome <= 0:
+                                        s_network_backhome = 0
+                                    self.network_backhome = s_network_backhome
+                                except Exception as e:
+                                    print({'error': e})
+                            if self.height_setting_data.get('energy_backhome') is not None:
+                                try:
+                                    s_energy_backhome = int(height_setting_data.get('energy_backhome'))
+                                    if s_energy_backhome <= 0:
+                                        s_energy_backhome = 0
+                                    elif s_energy_backhome >= 100:
+                                        s_energy_backhome = 80
+                                    self.energy_backhome = s_energy_backhome
+                                except Exception as e:
+                                    print({'error': e})
+                            if self.height_setting_data.get('obstacle_avoid_type') is not None:
+                                try:
+                                    s_obstacle_avoid_type = int(height_setting_data.get('obstacle_avoid_type'))
+                                    if s_obstacle_avoid_type in [0, 1, 2, 3, 4]:
+                                        pass
+                                    else:
+                                        s_obstacle_avoid_type = 0
+                                    self.obstacle_avoid_type = s_obstacle_avoid_type
+                                except Exception as e:
+                                    print({'error': e})
                         config.update_height_setting()
                     # 恢复默认配置
                     elif info_type == 4:

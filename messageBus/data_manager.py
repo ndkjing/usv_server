@@ -2,6 +2,7 @@
 管理数据收发
 """
 import time
+import math
 import json
 import copy
 import enum
@@ -125,9 +126,8 @@ class DataManager:
         # 调试模拟避障数据
         self.send_obstacle = False
         # 距离矩阵
-        self.cell_size = int(config.field_of_view / config.view_cell)
+        self.cell_size = int(config.field_of_view // config.view_cell)
         self.obstacle_list = [0] * self.cell_size  # 自动避障列表
-        self.control_obstacle_list = [0] * self.cell_size  # 手动避障障碍物列表
         self.task_list = []  # 获取存储的任务  经纬度，采样深度，采样量数据样式([lng,lat],[bottle_id,deep,capacity],[bottle_id,deep,capacity])
         self.sort_task_list = []  # 获取存储的任务  经纬度，采样深度，采样量数据样式[[lng,lat],[bottle_id,deep,capacity],[bottle_id,deep,capacity]]
         self.sort_task_done_list = []  # 总共有多少个点抽水完成存储0/1  单个长度等于任务点数量[[0,0],[0,0,0,0]
@@ -158,6 +158,7 @@ class DataManager:
         self.b_need_stop_draw = 0  # 是否需要发送停止抽水
         self.pre_control_data = None  # 记录上一次发送的运动控制消息防重发(运动控制消息不发送确认)
         self.server_data_obj_dict = {}  # 船号对应mqtt服务字典
+        self.ceil_go_throw = 1  # 船只通行可行驶角度值单元大小
 
     def thread_control(self):
         # 通用调用函数
@@ -213,33 +214,42 @@ class DataManager:
     def loop_send_tcp_data(self):
         pre_control_data = ''
         while True:
-            time.sleep(0.05)
+            time.sleep(0.03)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.tcp_send_data == 'S8Z':
                 self.tcp_server_obj.write_data(self.ship_id, 'S8Z')
+                time.sleep(0.02)
                 self.tcp_send_data = ""
             else:
                 # 需要发送数据且发送的数据与接受确认数据不相等
-                if self.tcp_send_data and self.tcp_send_data != self.tcp_server_obj.receive_confirm_data:
+                if self.tcp_send_data and self.tcp_send_data not in self.tcp_server_obj.receive_confirm_data:
                     self.tcp_current_data = self.tcp_send_data
+                # 如果有需要发送数据且不是一样的控制数据
                 if self.tcp_current_data and pre_control_data != self.tcp_current_data:
                     self.tcp_server_obj.write_data(self.ship_id, self.tcp_current_data)
-                    time.sleep(0.05)
+                    time.sleep(0.02)
                 if self.tcp_current_data == 'S8Z' or self.tcp_current_data.startswith('S3'):
                     self.tcp_current_data = ""
                 if self.tcp_current_data.startswith('S3'):
                     pre_control_data = self.tcp_current_data
-                if self.tcp_current_data == self.tcp_server_obj.receive_confirm_data:
+                if self.tcp_current_data in self.tcp_server_obj.receive_confirm_data:
                     if self.tcp_current_data == 'S2,0,0,0Z':
                         self.b_need_stop_draw = 0
                     self.tcp_current_data = ""
+                    self.tcp_send_data = ""
 
     # 抽水排水控制
     def control_draw_thread(self):
         while True:
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             time.sleep(1)
             self.ship_type_obj.ship_obj.draw(self)
             # 定时发送心跳数据
-            if int(time.time()) % 5 == 4:
+            if int(time.time()) % 3 == 2:
                 self.tcp_send_data = 'S8Z'
 
     # 清楚所有状态
@@ -266,6 +276,9 @@ class DataManager:
         while True:
             # 删除任务模式，将抽水单独控制
             time.sleep(0.1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.ship_id in self.tcp_server_obj.client_dict and \
                     self.tcp_server_obj.ship_status_data_dict.get(self.ship_id) and \
                     self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[4] == 1:
@@ -528,10 +541,42 @@ class DataManager:
         # print('index_point_distance', index_point_distance)
         return self.search_list[index]
 
+    def get_avoid_obstacle_point(self, path_planning_point_gps=None):
+        """
+        根据障碍物地图获取下一个运动点
+        :return: 下一个目标点，是否需要紧急停止【True为需要停止，False为不需要停止】
+        """
+        next_point_lng_lat = copy.deepcopy(path_planning_point_gps)
+        angle = vfh.vfh_func(self.obstacle_list, self.ceil_go_throw)
+        # print('避障角度：', angle)
+        if angle == -1:  # 没有可通行区域
+            abs_angle = (self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[3] + config.field_of_view / 2) % 360
+            next_point_lng_lat = lng_lat_calculate.one_point_diatance_to_end(self.lng_lat[0],
+                                                                             self.lng_lat[1],
+                                                                             abs_angle,
+                                                                             1)
+            self.b_avoid = 1
+            return next_point_lng_lat, False
+        elif angle == 0:  # 当前船头角度可通行
+            self.b_avoid = 0
+            return next_point_lng_lat, False
+        else:  # 船头角度不能通过但是传感器检测其他角度可以通过
+            abs_angle = (self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[3] + angle) % 360
+            next_point_lng_lat = lng_lat_calculate.one_point_diatance_to_end(self.lng_lat[0],
+                                                                             self.lng_lat[1],
+                                                                             abs_angle,
+                                                                             2)
+            self.b_avoid = 1
+            # print('绕行角度:', abs_angle)
+            return next_point_lng_lat, False
+
     # 处理电机控制
     def move_control(self):
         while True:
             time.sleep(0.01)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             self.direction = self.server_data_obj.mqtt_send_get_obj.control_move_direction
             control_info_dict = {
                 ShipStatus.computer_control: '手动',
@@ -649,7 +694,7 @@ class DataManager:
                     # 调试用 10秒后认为到达目的点
                     if self.point_arrive_start_time is None:
                         self.point_arrive_start_time = time.time()
-                    if time.time() - self.point_arrive_start_time > 20:
+                    if time.time() - self.point_arrive_start_time > 10:
                         arrive_sample_distance = 1
                     # 如果该点已经到达目的地
                     if arrive_sample_distance < config.arrive_distance:
@@ -672,12 +717,14 @@ class DataManager:
                             send_lng_lat = sampling_point_gps
                         else:
                             send_lng_lat = next_lng_lat
+                        if self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != 0:
+                            send_lng_lat, b_stop = self.get_avoid_obstacle_point(send_lng_lat)
                         self.tcp_send_data = 'S1,%d,%dZ' % (
                             round(send_lng_lat[0], 6) * 1000000, round(send_lng_lat[1], 6) * 1000000)
-                        arrive_point_distance = lng_lat_calculate.distanceFromCoordinate(self.lng_lat[0],
-                                                                                         self.lng_lat[1],
-                                                                                         send_lng_lat[0],
-                                                                                         send_lng_lat[1])
+                        # arrive_point_distance = lng_lat_calculate.distanceFromCoordinate(self.lng_lat[0],
+                        #                                                                  self.lng_lat[1],
+                        #                                                                  send_lng_lat[0],
+                        #                                                                  send_lng_lat[1])
                         # print('##############发送经纬度', arrive_sample_distance, arrive_point_distance, self.lng_lat,
                         #       send_lng_lat)
                     if self.ship_status != ShipStatus.computer_auto:
@@ -693,6 +740,9 @@ class DataManager:
         # 更新经纬度为高德经纬度
         while True:
             time.sleep(1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.lng_lat is not None:
                 try:
                     gaode_lng_lat = baidu_map.BaiduMap.gps_to_gaode_lng_lat(self.lng_lat)
@@ -708,9 +758,12 @@ class DataManager:
     def update_lng_lat(self):
         last_read_time = None
         while True:
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.tcp_server_obj.ship_status_data_dict.get(self.ship_id) and \
-                    self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[0] > 10 and \
-                    self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[1] > 10:
+                    180 > self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[0] > 10 and \
+                    90 > self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[1] > 10:
                 self.lng_lat = copy.deepcopy(self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[:2])
                 if not last_read_time:
                     last_read_time = time.time()
@@ -720,16 +773,18 @@ class DataManager:
                                                                               self.last_lng_lat[1],
                                                                               self.lng_lat[0],
                                                                               self.lng_lat[1])
-                    if speed_distance > 1000:
-                        print(self.last_lng_lat[0], self.last_lng_lat[1], self.lng_lat[0],
-                              self.lng_lat[1])
-                    self.run_distance += speed_distance
-                    if self.tcp_server_obj.ship_status_data_dict.get(self.ship_id):
-                        self.speed = self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6] / 1000.0 / 3.6
-                    # self.speed = round(speed_distance / (time.time() - last_read_time), 1)
-                    # 替换上一次的值
-                    self.last_lng_lat = copy.deepcopy(self.lng_lat)
-                    last_read_time = time.time()
+                    if speed_distance > 50:
+                        self.logger.error({"经纬度计算报错": [self.last_lng_lat[0], self.last_lng_lat[1], self.lng_lat[0],
+                                                       self.lng_lat[1]]})
+                    else:
+                        self.run_distance += speed_distance
+                        if self.tcp_server_obj.ship_status_data_dict.get(self.ship_id):
+                            self.speed = round(
+                                self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6] / 1000.0 / 3.6, 1)
+                        # self.speed = round(speed_distance / (time.time() - last_read_time), 1)
+                        # 替换上一次的值
+                        self.last_lng_lat = copy.deepcopy(self.lng_lat)
+                        last_read_time = time.time()
                 else:
                     self.last_lng_lat = copy.deepcopy(self.lng_lat)
                     last_read_time = time.time()
@@ -741,6 +796,9 @@ class DataManager:
         last_run_distance = None
         while True:
             time.sleep(1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.ship_id not in self.tcp_server_obj.client_dict:
                 continue
             if not self.server_data_obj.mqtt_send_get_obj.is_connected:
@@ -803,6 +861,9 @@ class DataManager:
     def update_config(self):
         while True:
             time.sleep(1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             # 客户端获取基础设置数据
             if self.server_data_obj.mqtt_send_get_obj.base_setting_data_info in [1, 4]:
                 if self.server_data_obj.mqtt_send_get_obj.base_setting_data is None:
@@ -849,6 +910,9 @@ class DataManager:
         high_f_status_data = {}
         while 1:
             time.sleep(0.16)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.tcp_server_obj.ship_status_data_dict.get(self.ship_id):
                 high_f_status_data.update(
                     {"direction": self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[3]})
@@ -861,12 +925,18 @@ class DataManager:
     def loop_check_task(self):
         while True:
             time.sleep(1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             self.ship_type_obj.ship_obj.task(self)
 
     # 状态检查函数，检查自身状态发送对应消息
     def check_status(self):
         while True:
             # 循环等待一定时间
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             time.sleep(1)
             if self.ship_id not in self.tcp_server_obj.client_dict:
                 continue
@@ -882,6 +952,33 @@ class DataManager:
                     self.low_dump_energy_warnning = 1
                 else:
                     self.low_dump_energy_warnning = 0
+            if self.server_data_obj.mqtt_send_get_obj.energy_backhome != self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome or \
+                    self.server_data_obj.mqtt_send_get_obj.network_backhome != self.server_data_obj.mqtt_send_get_obj.pre_network_backhome or \
+                    self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type:
+                if self.server_data_obj.mqtt_send_get_obj.network_backhome != 0:
+                    n = 1
+                else:
+                    n = 0
+                if self.server_data_obj.mqtt_send_get_obj.energy_backhome != 0:
+                    e = 1
+                else:
+                    e = 0
+                if self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != 0:
+                    o = 1
+                else:
+                    o = 0
+                self.tcp_send_data = 'S4,%d,%d,%d,3,3' % (n, e, o)
+                self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome = self.server_data_obj.mqtt_send_get_obj.energy_backhome
+                self.server_data_obj.mqtt_send_get_obj.pre_network_backhome = self.server_data_obj.mqtt_send_get_obj.network_backhome
+                self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type = self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type
+                print(self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome,
+                      self.server_data_obj.mqtt_send_get_obj.pre_network_backhome,
+                      self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type,
+                      self.server_data_obj.mqtt_send_get_obj.energy_backhome,
+                      self.server_data_obj.mqtt_send_get_obj.network_backhome,
+                      self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type,
+
+                      )
             # 接收到重置湖泊按钮
             if self.server_data_obj.mqtt_send_get_obj.reset_pool_click:
                 self.data_define_obj.pool_code = ''
@@ -954,12 +1051,18 @@ class DataManager:
         # 检查网络
         while True:
             time.sleep(5)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接check_ping_delay退出线程": self.ship_id})
+                return
             if not self.b_check_get_water_data and self.gaode_lng_lat is not None and \
                     self.ship_type_obj.ship_type == config.ShipType.water_detect:
                 adcode = baidu_map.BaiduMap.get_area_code(self.gaode_lng_lat)
                 if adcode:
                     self.area_id = data_valid.adcode_2_area_id(adcode)
-                    data_valid.get_current_water_data(area_id=self.area_id)
+                    try:
+                        data_valid.get_current_water_data(area_id=self.area_id)
+                    except Exception as e:
+                        self.logger.error({'请求数据报错': e})
                     self.b_check_get_water_data = 1
             # 发送模拟障碍物
             if self.send_obstacle:
@@ -971,56 +1074,68 @@ class DataManager:
                           )
                 self.logger.info({"obstacle_points": obstacle_points})
                 self.send_obstacle = False
-            time.sleep(3)
             ping = check_network.get_ping_delay()
             if ping:
                 self.ping = ping
             else:
                 self.logger.error('当前无网络信号')
                 # self.server_data_obj.mqtt_send_get_obj.is_connected = 0
+            self.logger.info({'ping': ping})
 
     # 发送障碍物信息线程
     def send_distacne(self):
-        last_send_time = time.time()  # 超过两秒没有障碍物就清空
-        b_clear = False
+        min_distance = 40
         while True:
             time.sleep(0.01)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if not self.server_data_obj.mqtt_send_get_obj.is_connected:
                 continue
             distance_info_data = {}
-            if self.ship_id in self.tcp_server_obj.ship_obstacle_data_dict:
+            self.obstacle_list = [0] * self.cell_size
+            if self.tcp_server_obj.ship_obstacle_data_dict.get(self.ship_id):
                 distance_info_data.update({'deviceId': self.ship_code})
                 distance_info_data.update({'distance_info': []})
                 for k in self.tcp_server_obj.ship_obstacle_data_dict.get(self.ship_id):
                     # 将原来左负右正改为左正右负，然后将负数角度转为正
                     angle = -1 * self.tcp_server_obj.ship_obstacle_data_dict.get(self.ship_id)[k][0]
+                    distance = self.tcp_server_obj.ship_obstacle_data_dict.get(self.ship_id)[k][1]
+                    obstacle_index = angle // config.view_cell + self.cell_size // 2
+                    if distance > config.min_steer_distance:
+                        b_obstacle = 0
+                    else:
+                        b_obstacle = 1
+                    self.obstacle_list[obstacle_index] = b_obstacle
                     if angle < 0:
                         angle = 360 + angle
+                    angle = 360 - angle
+                    min_distance = min(distance, min_distance)
                     distance_info_data['distance_info'].append(
-                        {'distance': self.tcp_server_obj.ship_obstacle_data_dict.get(self.ship_id)[k][1],
+                        {'distance': distance,
                          'angle': angle})
+                # 计算前视野范围可通行区域  障碍物距离不同可通行单元格不同  障碍物距离按检测到最近的障碍物计算
+                # 设定船宽度为0.7米
+                ship_width = 0.5
+                for i in range(1, config.field_of_view // config.view_cell):
+                    angle = i * config.view_cell
+                    if min_distance * math.sin(math.radians(angle)) < ship_width:
+                        self.ceil_go_throw = i
                 if self.ship_id in self.tcp_server_obj.ship_status_data_dict:
                     distance_info_data.update(
                         {'direction': round(self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[3], 1)})
                 else:
                     distance_info_data.update({'direction': 0})
+                # print('self.obstacle_list', self.obstacle_list, self.ceil_go_throw)
+                # print("distance_info_data", distance_info_data)
                 self.send(method='mqtt',
                           topic='distance_info_%s' % self.ship_code,
                           data=distance_info_data,
                           qos=0)
-                last_send_time = time.time()
-                b_clear = True
                 time.sleep(0.05)  # 发送数据后延时一点时间
-            if time.time() - last_send_time > 2 and b_clear:
-                distance_info_data_clear = {}
-                distance_info_data_clear.update({'deviceId': self.ship_code})
-                distance_info_data_clear.update({'distance_info': []})
-                distance_info_data_clear.update({'direction': 0})
-                self.send(method='mqtt',
-                          topic='distance_info_%s' % self.ship_code,
-                          data=distance_info_data_clear,
-                          qos=0)
-                b_clear = False
+            else:
+                min_distance = 40
+                self.ceil_go_throw = 1
 
     # 检查开关相关信息
     def check_switch(self):
@@ -1030,6 +1145,9 @@ class DataManager:
         """
         while True:
             time.sleep(1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             switch_data = {
                 "info_type": 2,  # 树莓派发给前端
                 # 抽水 1 抽水 没有该键或者0表示不抽水
@@ -1061,6 +1179,9 @@ class DataManager:
         """
         pre_record_lng_lat = [10.0, 10.0]  # 随便设置的初始值
         while True:
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.server_data_obj.mqtt_send_get_obj.b_record_point:
                 if self.gaode_lng_lat is None:
                     time.sleep(3)
@@ -1112,6 +1233,9 @@ class DataManager:
     def scan_cal(self):
         scan_points = []
         while True:
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             if self.server_data_obj.mqtt_send_get_obj.surrounded_points is not None and \
                     len(self.server_data_obj.mqtt_send_get_obj.surrounded_points) > 0 and \
                     config.scan_gap:
@@ -1193,6 +1317,9 @@ class DataManager:
         http_get_time = True
         while True:
             time.sleep(1)
+            if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+                self.logger.info({"船只断开连接退出线程": self.ship_id})
+                return
             # 登录获取值
             if not self.token:
                 login_data = {"deviceId": self.ship_code}
@@ -1201,12 +1328,12 @@ class DataManager:
                 if return_login_data:
                     return_login_data_json = json.loads(return_login_data.content)
                     if return_login_data_json.get("code") == 200 and return_login_data_json.get("data"):
-                        print('登录返回token', return_login_data_json.get("data").get("token"))
+                        self.logger.info({'登录返回token': return_login_data_json.get("data").get("token")})
                         self.token = return_login_data_json.get("data").get("token")
                     else:
-                        print('return_login_data', return_login_data_json)
+                        self.logger.error({'return_login_data': return_login_data_json})
                 else:
-                    print('return_login_data', return_login_data)
+                    self.logger.error({'return_login_data': return_login_data})
             if not self.token:
                 continue
             if http_get_time:

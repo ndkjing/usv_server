@@ -94,7 +94,7 @@ stc_baud = 115200
 b_com_stc = os.path.exists(stc_port) and b_use_com_stc  # 判断是否存在以及是否使用
 local_http = False
 if local_http:
-    http_domin = '192.168.8.26:8008'
+    http_domin = '192.168.8.3:8008'
 else:
     http_domin = 'peri.xxlun.com'
 # http 接口

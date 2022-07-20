@@ -368,8 +368,8 @@ class WaterDetect:
             mqtt_send_detect_data.update(mqtt_send_detect_data.get('water'))
             if data_manager_obj.action_id:
                 mqtt_send_detect_data.update({'planId': data_manager_obj.action_id})
-            if data_manager_obj.creator:
-                mqtt_send_detect_data.update({"creator": data_manager_obj.creator})
+            # if data_manager_obj.creator:
+            #     mqtt_send_detect_data.update({"creator": data_manager_obj.creator})
             data_manager_obj.send(method='mqtt', topic='detect_data_%s' % data_manager_obj.data_define_obj.ship_code,
                                   data=mqtt_send_detect_data,
                                   qos=0)
@@ -749,8 +749,8 @@ class MultiDraw:
             # 添加经纬度
             draw_data.update({'jwd': json.dumps(data_manager_obj.lng_lat)})
             draw_data.update({'gjwd': json.dumps(data_manager_obj.gaode_lng_lat)})
-            if data_manager_obj.creator:
-                draw_data.update({"creator": data_manager_obj.creator})
+            # if data_manager_obj.creator:
+            #     draw_data.update({"creator": data_manager_obj.creator})
             if data_manager_obj.action_id:
                 draw_data.update({'planId': data_manager_obj.action_id})
             data_manager_obj.send(method='mqtt', topic='draw_data_%s' % config.ship_code, data=draw_data,
@@ -1039,8 +1039,8 @@ class Adcp:
             deep_data.update({'gjwd': json.dumps(data_manager_obj.gaode_lng_lat)})
             if data_manager_obj.action_id:
                 deep_data.update({'planId': data_manager_obj.action_id})
-                if data_manager_obj.creator:
-                    deep_data.update({"creator": data_manager_obj.creator})
+                # if data_manager_obj.creator:
+                #     deep_data.update({"creator": data_manager_obj.creator})
             if data_manager_obj.action_id:
                 deep_data.update({'planId': data_manager_obj.action_id})
             data_manager_obj.send(method='mqtt', topic='deep_data_%s' % config.ship_code,
@@ -1429,8 +1429,8 @@ class MultiDrawDetect:
             # 添加经纬度
             draw_data.update({'jwd': json.dumps(data_manager_obj.lng_lat)})
             draw_data.update({'gjwd': json.dumps(data_manager_obj.gaode_lng_lat)})
-            if data_manager_obj.creator:
-                draw_data.update({"creator": data_manager_obj.creator})
+            # if data_manager_obj.creator:
+            #     draw_data.update({"creator": data_manager_obj.creator})
             if data_manager_obj.action_id:
                 draw_data.update({'planId': data_manager_obj.action_id})
             data_manager_obj.send(method='mqtt', topic='draw_data_%s' % config.ship_code, data=draw_data,
@@ -1509,8 +1509,8 @@ class MultiDrawDetect:
             mqtt_send_detect_data.update(mqtt_send_detect_data.get('water'))
             if data_manager_obj.action_id:
                 mqtt_send_detect_data.update({'planId': data_manager_obj.action_id})
-            if data_manager_obj.creator:
-                mqtt_send_detect_data.update({"creator": data_manager_obj.creator})
+            # if data_manager_obj.creator:
+            #     mqtt_send_detect_data.update({"creator": data_manager_obj.creator})
             data_manager_obj.send(method='mqtt', topic='detect_data_%s' % config.ship_code,
                                   data=mqtt_send_detect_data,
                                   qos=0)
