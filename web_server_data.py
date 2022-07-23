@@ -186,7 +186,6 @@ class MqttSendGet:
     def on_disconnect_callback(self, client, userdata, rc):
         self.logger.info('disconnected with result code:  ' + str(rc), )
         self.is_need_reconnect = True
-        print(time.time(), self.ship_code, 'self.is_need_reconnect', self.is_need_reconnect)
 
     # 连接MQTT服务器
     def mqtt_connect(self):

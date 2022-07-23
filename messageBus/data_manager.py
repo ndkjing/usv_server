@@ -1086,7 +1086,7 @@ class DataManager:
     def send_distacne(self):
         min_distance = 40
         while True:
-            time.sleep(0.01)
+            time.sleep(0.3)
             if self.ship_id in self.tcp_server_obj.disconnect_client_list:
                 self.logger.info({"船只断开连接退出线程": self.ship_id})
                 return

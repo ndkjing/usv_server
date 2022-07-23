@@ -58,7 +58,7 @@ class TcpServer:
         while True:
             # 等待客户连接，连接成功后，将socket对象保存到client，将细节数据等保存到addr
             client, addr = self.tcp_server_socket.accept()
-            print(time.time(), "客户端的ip地址和端口号为:", addr)
+            server_logger.info({time.time(): ["客户端的ip地址和端口号为:", addr]})
             # 代码执行到此，说明客户端和服务端套接字建立连接成功
             client_handler = threading.Thread(target=self.handle_client, args=(client, addr))
             # 子线程守护主线程
@@ -80,7 +80,7 @@ class TcpServer:
                         ship_id = int(ship_id_list[0])
                         if recv_content.startswith('A'):
                             rec_list = recv_content.split(',')
-                            if len(rec_list) >= 6:
+                            if len(rec_list) >= 7:
                                 if ship_id not in self.client_dict:
                                     self.client_dict.update({ship_id: client})
                                 if ship_id not in addr_dict:
@@ -96,8 +96,8 @@ class TcpServer:
                                 speed = int(rec_list[7].split('Z')[0])
                                 self.ship_status_data_dict.update(
                                     {ship_id: [lng, lat, dump_energy, current_angle, current_mode, angle_error, speed]})
-                                # print(time.time(), "接收客户端的状态数据:", recv_content)
-                                # print(self.client_dict, addr_dict)
+                            else:
+                                server_logger.info({ship_id: [time.time(), "接收客户端的状态数据:", recv_content]})
                         if recv_content.startswith('B'):
                             rec_list = recv_content.split(',')
                             if len(rec_list) == 6:
@@ -148,6 +148,10 @@ class TcpServer:
                         self.receive_confirm_data = recv_content.strip()
                 if addr_dict.get(addr) in self.disconnect_client_list:
                     return
+            except ValueError as e1:
+                server_logger.error({'tcp接受数据报错..': e1})
+            except IndexError as e2:
+                server_logger.error({'tcp接受数据报错..': e2})
             except Exception as e:
                 server_logger.error({'tcp接受数据报错..': e})
                 if addr_dict.get(addr):
@@ -173,7 +177,7 @@ class TcpServer:
                 self.disconnect_client_list.append(ship_id)
             if ship_id in self.client_dict:
                 del self.client_dict[ship_id]
-            server_logger.error({'tcp发送数据终端断开连接':e})
+            server_logger.error({'tcp发送数据终端断开连接': e})
 
 
 def te_():

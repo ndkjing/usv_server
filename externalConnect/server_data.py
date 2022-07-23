@@ -259,7 +259,6 @@ class MqttSendGet:
     # 断开MQTt回调
     def on_disconnect_callback(self, client, userdata, rc):
         self.logger.info('disconnected with result code:  ' + str(rc), )
-        print('on_disconnect_callback self.is_connected', self.is_connected)
         self.is_connected = 0
 
     # 建立连接时候回调
@@ -269,7 +268,6 @@ class MqttSendGet:
         # 启动后自动订阅话题
         for topic_, qos_ in self.topics:
             self.subscribe_topic(topic=topic_, qos=qos_)
-        print('on_connect_callback self.is_connected', self.is_connected)
 
     # 发布消息回调
     def on_publish_callback(self, client, userdata, mid):

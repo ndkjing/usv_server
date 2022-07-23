@@ -55,17 +55,17 @@ ship_code = 'XXLJC4LCGSCSD1DA00'+str(ship_id)
 # current_ship_type = ship_code_type_dict.get(ship_code)
 sysstr = platform.system()
 if sysstr == "Windows":
-    print("Call Windows tasks")
+    # print("Call Windows tasks")
     current_platform = CurrentPlatform.windows
 elif sysstr == "Linux":  # 树莓派上也是Linux
-    print("Call Linux tasks")
+    # print("Call Linux tasks")
     # 公司Linux电脑名称
     if platform.node() == 'raspberrypi':
         current_platform = CurrentPlatform.pi
     else:
         current_platform = CurrentPlatform.linux
 else:
-    print("other System tasks")
+    # print("other System tasks")
     current_platform = CurrentPlatform.others
 # 不是在树莓派上都是用调试模式
 if current_platform == CurrentPlatform.pi:
