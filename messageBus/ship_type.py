@@ -44,11 +44,17 @@ class WaterDetect:
         """
         # 判断是否抽水  点击抽水情况
         if b_draw:
-            data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
+            # data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
+            #                                                    int(draw_deep * 10),
+            #                                                    int(draw_capacity / 10))
+            send_data = 'S2,%d,%d,%dZ' % (bottle_id,
                                                                int(draw_deep * 10),
                                                                int(draw_capacity / 10))
+            data_manager_obj.set_send_data(send_data, 2)
         elif data_manager_obj.b_need_stop_draw:
-            data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+            # data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+            send_data = 'S2,0,0,0Z'
+            data_manager_obj.set_send_data(send_data, 2)
 
     # 判断怎么样抽水
     def draw(self, data_manager_obj):
@@ -406,12 +412,19 @@ class MultiDraw:
         @return:
         """
         # 判断是否抽水  点击抽水情况
+        # 判断是否抽水  点击抽水情况
         if b_draw:
-            data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
-                                                               int(draw_deep * 10),
-                                                               int(draw_capacity / 10))
+            # data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
+            #                                                    int(draw_deep * 10),
+            #                                                    int(draw_capacity / 10))
+            send_data = 'S2,%d,%d,%dZ' % (bottle_id,
+                                          int(draw_deep * 10),
+                                          int(draw_capacity / 10))
+            data_manager_obj.set_send_data(send_data, 2)
         elif data_manager_obj.b_need_stop_draw:
-            data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+            # data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+            send_data = 'S2,0,0,0Z'
+            data_manager_obj.set_send_data(send_data, 2)
 
     # 判断怎么样抽水
     def draw(self, data_manager_obj):
@@ -858,7 +871,7 @@ class Adcp:
             print('排序任务数据data_manager_obj.task_list', data_manager_obj.task_list)
 
     def draw(self, data_manager_obj):
-        pass
+        self.send_data(data_manager_obj)
 
     # 任务
     def task(self, data_manager_obj):
@@ -1027,12 +1040,12 @@ class Adcp:
         elif time.time() - self.send_data_time > data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_time:
             self.b_send_data = True
             # print(time.time(),'超出时间测量', data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_time)
-        if self.b_send_data and data_manager_obj.deep != -1:
+        if self.b_send_data and data_manager_obj.deep != -1 and data_manager_obj.deep > 0.01:
             if data_manager_obj.server_data_obj.mqtt_send_get_obj.pool_code:
                 data_manager_obj.data_define_obj.pool_code = data_manager_obj.server_data_obj.mqtt_send_get_obj.pool_code
             deep_data = {}
             deep_data.update({'deep': data_manager_obj.deep})
-            deep_data.update({'deviceId': config.ship_code})
+            deep_data.update({'deviceId': data_manager_obj.ship_code})
             deep_data.update({'mapId': data_manager_obj.data_define_obj.pool_code})
             # 添加经纬度
             deep_data.update({'jwd': json.dumps(data_manager_obj.lng_lat)})
@@ -1043,30 +1056,30 @@ class Adcp:
                 #     deep_data.update({"creator": data_manager_obj.creator})
             if data_manager_obj.action_id:
                 deep_data.update({'planId': data_manager_obj.action_id})
-            data_manager_obj.send(method='mqtt', topic='deep_data_%s' % config.ship_code,
+            data_manager_obj.send(method='mqtt', topic='deep_data_%s' % data_manager_obj.ship_code,
                                   data={'deep': data_manager_obj.deep},
                                   qos=0)
             # 发送到服务器
-            # if len(data_manager_obj.data_define_obj.pool_code) > 0:
-            #     try:
-            #         print('深度数据', deep_data)
-            #         # return_data = data_manager_obj.server_data_obj.send_server_http_data('POST',
-            #         #                                                                      deep_data,
-            #         #                                                                      config.http_deep_save,
-            #         #                                                                      token=data_manager_obj.token)
-            #         print('深度数据返回:', return_data)
-            #         self.save_deep = data_manager_obj.deep
-            #         self.send_data_lng_lat = data_manager_obj.lng_lat
-            #         self.send_data_time = time.time()
-            #         if return_data:
-            #             content_data = json.loads(return_data.content)
-            #             if content_data.get("code") != 200:
-            #                 data_manager_obj.logger.error({'发送深度数据失败': content_data})
-            #             else:
-            #                 data_manager_obj.logger.info({"发送深度数据成功": deep_data})
-            #                 self.b_send_data = False
-            #     except Exception as e:
-            #         data_manager_obj.logger.info({"发送深度数据error": e})
+            if len(data_manager_obj.data_define_obj.pool_code) > 0:
+                try:
+                    print('深度数据', deep_data)
+                    return_data = data_manager_obj.server_data_obj.send_server_http_data('POST',
+                                                                                         deep_data,
+                                                                                         config.http_deep_save,
+                                                                                         token=data_manager_obj.token)
+                    print('深度数据返回:', return_data)
+                    self.save_deep = data_manager_obj.deep
+                    self.send_data_lng_lat = data_manager_obj.lng_lat
+                    self.send_data_time = time.time()
+                    if return_data:
+                        content_data = json.loads(return_data.content)
+                        if content_data.get("code") != 200:
+                            data_manager_obj.logger.error({'发送深度数据失败': content_data})
+                        else:
+                            data_manager_obj.logger.info({"发送深度数据成功": deep_data})
+                            self.b_send_data = False
+                except Exception as e:
+                    data_manager_obj.logger.info({"发送深度数据error": e})
 
 
 class MultiDrawDetect:
@@ -1086,11 +1099,17 @@ class MultiDrawDetect:
         """
         # 判断是否抽水  点击抽水情况
         if b_draw:
-            data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
+            # data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
+            #                                                    int(draw_deep * 10),
+            #                                                    int(draw_capacity / 10))
+            send_data = 'S2,%d,%d,%dZ' % (bottle_id,
                                                                int(draw_deep * 10),
                                                                int(draw_capacity / 10))
+            data_manager_obj.set_send_data(send_data,2)
         elif data_manager_obj.b_need_stop_draw:
-            data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+            # data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+            send_data = 'S2,0,0,0Z'
+            data_manager_obj.set_send_data(send_data, 2)
 
     # 判断怎么样抽水
     def draw(self, data_manager_obj):

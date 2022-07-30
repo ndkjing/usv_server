@@ -159,6 +159,9 @@ class DataManager:
         self.pre_control_data = None  # 记录上一次发送的运动控制消息防重发(运动控制消息不发送确认)
         self.server_data_obj_dict = {}  # 船号对应mqtt服务字典
         self.ceil_go_throw = 1  # 船只通行可行驶角度值单元大小
+        self.deep = 0  # 深度 单位米
+        self.send_data_list = ["", "", "", "", "", "", "", "", "S8Z"]  # 空位 经纬度 开关  手动控制 设置 pid 罗盘校准 抽水杆 心跳
+        self.tcp_server_obj.ship_id_send_dict.update({ship_id: self.send_data_list})
 
     def thread_control(self):
         # 通用调用函数
@@ -211,34 +214,56 @@ class DataManager:
                 self.logger.info("船断线mqtt主动断开连接。。。")
                 time.sleep(2)
 
+    # def loop_send_tcp_data(self):
+    #     pre_control_data = ''
+    #     while True:
+    #         time.sleep(0.03)
+    #         if self.ship_id in self.tcp_server_obj.disconnect_client_list:
+    #             self.logger.info({"船只断开连接退出线程": self.ship_id})
+    #             return
+    #         if self.tcp_send_data == 'S8Z':
+    #             self.tcp_server_obj.write_data(self.ship_id, 'S8Z')
+    #             time.sleep(0.02)
+    #             self.tcp_send_data = ""
+    #         else:
+    #             # 需要发送数据且发送的数据与接受确认数据不相等
+    #             if self.tcp_send_data and self.tcp_send_data not in self.tcp_server_obj.receive_confirm_data:
+    #                 self.tcp_current_data = self.tcp_send_data
+    #             # 如果有需要发送数据且不是一样的控制数据
+    #             if self.tcp_current_data and pre_control_data != self.tcp_current_data:
+    #                 self.tcp_server_obj.write_data(self.ship_id, self.tcp_current_data)
+    #                 time.sleep(0.02)
+    #             if self.tcp_current_data == 'S8Z' or self.tcp_current_data.startswith('S3'):
+    #                 self.tcp_current_data = ""
+    #             if self.tcp_current_data.startswith('S3'):
+    #                 pre_control_data = self.tcp_current_data
+    #             if self.tcp_current_data in self.tcp_server_obj.receive_confirm_data:
+    #                 if self.tcp_current_data == 'S2,0,0,0Z':
+    #                     self.b_need_stop_draw = 0
+    #                 self.tcp_current_data = ""
+    #                 self.tcp_send_data = ""
+
+    def set_send_data(self, data, index):
+        self.tcp_server_obj.ship_id_send_dict.get(self.ship_id)[index] = data
+
     def loop_send_tcp_data(self):
-        pre_control_data = ''
+        # 不同消息发送间隔 每个循环30ms  控制数次每次都发  其他数据10次发一次
+        init_count = 100
+        count = 0
         while True:
-            time.sleep(0.03)
+            time.sleep(0.05)
             if self.ship_id in self.tcp_server_obj.disconnect_client_list:
                 self.logger.info({"船只断开连接退出线程": self.ship_id})
                 return
-            if self.tcp_send_data == 'S8Z':
-                self.tcp_server_obj.write_data(self.ship_id, 'S8Z')
-                time.sleep(0.02)
-                self.tcp_send_data = ""
-            else:
-                # 需要发送数据且发送的数据与接受确认数据不相等
-                if self.tcp_send_data and self.tcp_send_data not in self.tcp_server_obj.receive_confirm_data:
-                    self.tcp_current_data = self.tcp_send_data
-                # 如果有需要发送数据且不是一样的控制数据
-                if self.tcp_current_data and pre_control_data != self.tcp_current_data:
-                    self.tcp_server_obj.write_data(self.ship_id, self.tcp_current_data)
-                    time.sleep(0.02)
-                if self.tcp_current_data == 'S8Z' or self.tcp_current_data.startswith('S3'):
-                    self.tcp_current_data = ""
-                if self.tcp_current_data.startswith('S3'):
-                    pre_control_data = self.tcp_current_data
-                if self.tcp_current_data in self.tcp_server_obj.receive_confirm_data:
-                    if self.tcp_current_data == 'S2,0,0,0Z':
-                        self.b_need_stop_draw = 0
-                    self.tcp_current_data = ""
-                    self.tcp_send_data = ""
+            if self.tcp_server_obj.ship_id_send_dict.get(self.ship_id):
+                for info in self.tcp_server_obj.ship_id_send_dict.get(self.ship_id):
+                    if info:
+                        if 'S3' in info or count == init_count:
+                            self.tcp_server_obj.write_data(self.ship_id, info)
+                            time.sleep(0.05)
+                if count == init_count:
+                    count = 0
+                count += 1
 
     # 抽水排水控制
     def control_draw_thread(self):
@@ -247,10 +272,12 @@ class DataManager:
                 self.logger.info({"船只断开连接退出线程": self.ship_id})
                 return
             time.sleep(1)
+            if self.tcp_server_obj.ship_id_deep_dict.get(self.ship_id):
+                self.deep = self.tcp_server_obj.ship_id_deep_dict.get(self.ship_id)
             self.ship_type_obj.ship_obj.draw(self)
             # 定时发送心跳数据
-            if int(time.time()) % 3 == 2:
-                self.tcp_send_data = 'S8Z'
+            # if int(time.time()) % 3 == 2:
+            #     self.tcp_send_data = 'S8Z'
 
     # 清楚所有状态
     def clear_all_status(self):
@@ -550,7 +577,8 @@ class DataManager:
         angle = vfh.vfh_func(self.obstacle_list, self.ceil_go_throw)
         # print('避障角度：', angle)
         if angle == -1:  # 没有可通行区域
-            abs_angle = (self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[3] + config.field_of_view / 2) % 360
+            abs_angle = (self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[
+                             3] + config.field_of_view / 2) % 360
             next_point_lng_lat = lng_lat_calculate.one_point_diatance_to_end(self.lng_lat[0],
                                                                              self.lng_lat[1],
                                                                              abs_angle,
@@ -611,11 +639,21 @@ class DataManager:
             # 电脑手动
             if self.ship_status == ShipStatus.computer_control or self.ship_status == ShipStatus.tasking:
                 if 0 <= self.server_data_obj.mqtt_send_get_obj.rocker_angle < 360:
+                    #         90                0
+                    # 将  180       0  ->   90        270
+                    #         270               180
                     rocker_angle = (self.server_data_obj.mqtt_send_get_obj.rocker_angle + 270) % 360
+                    # 左右容易推到左后 右后 造成转向误差 在左后 右后增加一定范围映射到左上右上
+                    threshold = 45
+                    if 90 < rocker_angle < 90 + threshold:
+                        rocker_angle = 90
+                    if 270 - threshold < rocker_angle < 270:
+                        rocker_angle = 270
                     control_data = 'S3,%d,1Z' % rocker_angle
-                    if self.pre_control_data is None or self.pre_control_data != control_data:
-                        self.tcp_send_data = control_data
-                        self.pre_control_data = self.tcp_send_data
+                    self.set_send_data(control_data, 3)
+                    # if self.pre_control_data is None or self.pre_control_data != control_data:
+                    #     self.tcp_send_data = control_data
+                    #     self.pre_control_data = self.tcp_send_data
                 if self.server_data_obj.mqtt_send_get_obj.rocker_angle == -1:
                     if self.direction == -1:
                         stop_pause = 3
@@ -626,9 +664,10 @@ class DataManager:
                     if stop_pause:
                         control_data = 'S3,%d,%dZ' % (
                             self.server_data_obj.mqtt_send_get_obj.rocker_angle, stop_pause)
-                        if self.pre_control_data is None or self.pre_control_data != control_data:
-                            self.tcp_send_data = control_data
-                            self.pre_control_data = self.tcp_send_data
+                        self.set_send_data(control_data, 3)
+                        # if self.pre_control_data is None or self.pre_control_data != control_data:
+                        #     self.tcp_send_data = control_data
+                        #     self.pre_control_data = self.tcp_send_data
             # 电脑自动
             elif self.ship_status == ShipStatus.computer_auto:
                 # 计算总里程 和其他需要在巡航开始前计算数据
@@ -692,10 +731,10 @@ class DataManager:
                                                                                       sampling_point_gps[1])
 
                     # 调试用 10秒后认为到达目的点
-                    if self.point_arrive_start_time is None:
-                        self.point_arrive_start_time = time.time()
-                    if time.time() - self.point_arrive_start_time > 10:
-                        arrive_sample_distance = 1
+                    # if self.point_arrive_start_time is None:
+                    #     self.point_arrive_start_time = time.time()
+                    # if time.time() - self.point_arrive_start_time > 10:
+                    #     arrive_sample_distance = 1
                     # 如果该点已经到达目的地
                     if arrive_sample_distance < config.arrive_distance:
                         # 判断是否是行动抽水
@@ -719,8 +758,10 @@ class DataManager:
                             send_lng_lat = next_lng_lat
                         if self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != 0:
                             send_lng_lat, b_stop = self.get_avoid_obstacle_point(send_lng_lat)
-                        self.tcp_send_data = 'S1,%d,%dZ' % (
+                        send_data = 'S1,%d,%dZ' % (
                             round(send_lng_lat[0], 6) * 1000000, round(send_lng_lat[1], 6) * 1000000)
+                        # self.tcp_send_data = send_data
+                        self.set_send_data(send_data, 1)
                         # arrive_point_distance = lng_lat_calculate.distanceFromCoordinate(self.lng_lat[0],
                         #                                                                  self.lng_lat[1],
                         #                                                                  send_lng_lat[0],
@@ -967,18 +1008,12 @@ class DataManager:
                     o = 1
                 else:
                     o = 0
-                self.tcp_send_data = 'S4,%d,%d,%d,3,3' % (n, e, o)
+                send_data = 'S4,%d,%d,%d,3,3Z' % (n, e, o)
+                # self.tcp_send_data = 'S4,%d,%d,%d,3,3Z' % (n, e, o)
+                self.set_send_data(send_data, 4)
                 self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome = self.server_data_obj.mqtt_send_get_obj.energy_backhome
                 self.server_data_obj.mqtt_send_get_obj.pre_network_backhome = self.server_data_obj.mqtt_send_get_obj.network_backhome
                 self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type = self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type
-                print(self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome,
-                      self.server_data_obj.mqtt_send_get_obj.pre_network_backhome,
-                      self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type,
-                      self.server_data_obj.mqtt_send_get_obj.energy_backhome,
-                      self.server_data_obj.mqtt_send_get_obj.network_backhome,
-                      self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type,
-
-                      )
             # 接收到重置湖泊按钮
             if self.server_data_obj.mqtt_send_get_obj.reset_pool_click:
                 self.data_define_obj.pool_code = ''

@@ -513,5 +513,6 @@ obstacle_points = [[114.523433, 30.506193],
 forward_target_distance = 10  # 前进寻找下一点距离
 remote_control_outtime = 2  # 接受不到遥控器消息后断开遥控器使能时间单位秒
 
+deep_recoup=0.08 # 深度补偿值 单位米
 if __name__ == '__main__':
     write_setting(True, True, True, True)

@@ -1,6 +1,8 @@
+import copy
 import re
 import socket
 import server_config
+import config
 import json
 import time
 import requests
@@ -46,6 +48,9 @@ class TcpServer:
         self.receive_confirm_data = ""
         self.disconnect_client_list = []  # 断线了的船号
         self.base_setting_dict = {}  # 船只返航避障设置
+        self.ship_id_time_dict = {}  # 船号最近收到的消息
+        self.ship_id_deep_dict = {}  # 船号检测到的深度
+        self.ship_id_send_dict = {}  # 船号对应要发送数据
 
     def wait_connect(self):
         # 等待客户连接，连接成功后，将socket对象保存到client，将细节数据等保存到addr
@@ -69,15 +74,16 @@ class TcpServer:
     # 客户处理线程
     def handle_client(self, client, addr):
         addr_dict = {}
-        last_send_time = time.time()
+        last_send_time = time.time()  # 上次接收到避障消息时间
         while True:
             try:
-                recv_data = client.recv(1024)
+                recv_data = client.recv(1024, 0)
                 if recv_data:
                     recv_content = recv_data.decode("gbk")
-                    ship_id_list = re.findall('[ABCD](\d+)', recv_content)
+                    ship_id_list = re.findall('[ABCDS](\d+)', recv_content)
                     if len(ship_id_list) > 0:
                         ship_id = int(ship_id_list[0])
+                        self.ship_id_time_dict.update({ship_id: time.time()})
                         if recv_content.startswith('A'):
                             rec_list = recv_content.split(',')
                             if len(rec_list) >= 7:
@@ -93,28 +99,38 @@ class TcpServer:
                                 current_angle = round(float(rec_list[4]), 1)
                                 current_mode = int(rec_list[5])
                                 angle_error = int(rec_list[6])
-                                speed = int(rec_list[7].split('Z')[0])
-                                self.ship_status_data_dict.update(
-                                    {ship_id: [lng, lat, dump_energy, current_angle, current_mode, angle_error, speed]})
+                                if len(rec_list) == 8:
+                                    speed = int(rec_list[7].split('Z')[0])
+                                    self.ship_status_data_dict.update(
+                                        {ship_id: [lng, lat, dump_energy, current_angle, current_mode, angle_error,
+                                                   speed]})
+                                elif len(rec_list) == 9:
+                                    speed = int(rec_list[7])
+                                    deep = int(rec_list[8].split('Z')[0])
+                                    deep = round(deep / 100.0 + config.deep_recoup, 2)
+                                    self.ship_id_deep_dict.update({ship_id: deep})
+                                    self.ship_status_data_dict.update(
+                                        {ship_id: [lng, lat, dump_energy, current_angle, current_mode, angle_error,
+                                                   speed]})
                             else:
                                 server_logger.info({ship_id: [time.time(), "接收客户端的状态数据:", recv_content]})
-                        if recv_content.startswith('B'):
+                        elif recv_content.startswith('B'):
                             rec_list = recv_content.split(',')
                             if len(rec_list) == 6:
-                                wt = int(rec_list[1])
-                                ph = int(rec_list[2])
-                                doDo = int(rec_list[3])
-                                ec = int(rec_list[4])
-                                td = int(rec_list[5].split('Z')[0])
+                                wt = round(float(rec_list[1]) / 10.0, 2)
+                                ph = round(float(rec_list[2]) / 100.0, 2)
+                                doDo = round(float(rec_list[3]) / 100.0, 2)
+                                ec = round(float(rec_list[4]) / 10.0, 2)
+                                td = round(float(rec_list[5].split('Z')[0]) / 100.0, 2)
                                 self.ship_detect_data_dict.update(
                                     {ship_id: [wt, ph, doDo, ec, td]})
-                                server_logger.info('深度数据反馈消息%s\r\n' % recv_content.strip())
+                                server_logger.info('检测深度数据反馈消息%s\r\n' % recv_content.strip())
                             elif len(rec_list) == 2:
                                 deep = int(rec_list[1].split('Z')[0])
                                 self.ship_detect_data_dict.update(
                                     {ship_id: [deep]})
-                                server_logger.info('检测数据反馈消息%s\r\n' % recv_content.strip())
-                        if recv_content.startswith('C'):
+                                server_logger.info('深度数据反馈消息%s\r\n' % recv_content.strip())
+                        elif recv_content.startswith('C'):
                             rec_list = recv_content.split(',')
                             if len(rec_list) == 5:
                                 bottle_id = int(rec_list[1])
@@ -124,7 +140,7 @@ class TcpServer:
                                 self.ship_draw_dict.update(
                                     {ship_id: [bottle_id, draw_status, dump_draw_time, full_draw_time]})
                             # print('抽水反馈消息：%s\r\n' % recv_content.strip())
-                        if recv_content.startswith('D'):
+                        elif recv_content.startswith('D'):
                             rec_list = recv_content.split(',')
                             if len(rec_list) >= 4:
                                 obj_id = int(rec_list[1])
@@ -136,20 +152,26 @@ class TcpServer:
                                 else:
                                     self.ship_obstacle_data_dict.get(ship_id).update(
                                         {obj_id: [obj_angle, obj_distance]})
-                                # print(time.time(),'障碍物检测反馈消息', recv_content.strip())
+                                # print(time.time(), '障碍物检测反馈消息', recv_content.strip())
                                 last_send_time = time.time()
                             # print('self.ship_obstacle_data_dict', self.ship_obstacle_data_dict)
+                        elif recv_content.startswith('S'):
+                            server_logger.info({time.time(): ['接收客户端的确认数据:%s\r\n' % recv_content]})
+                            if "Operating" in recv_content:
+                                server_logger.error({"树莓派重启": time.asctime(time.localtime(time.time()))})
+                            self.receive_confirm_data = recv_content
+                            if self.ship_id_send_dict.get(ship_id):
+                                temp_info_list = copy.copy(self.ship_id_send_dict.get(ship_id))
+                                for index, info in enumerate(temp_info_list):
+                                    if info in recv_content:
+                                        temp_info_list[index] = ""  # 接收到确认消息清空消息
+                                self.ship_id_send_dict[ship_id] = temp_info_list
                         if time.time() - last_send_time > 2:
                             self.ship_obstacle_data_dict.update({ship_id: {}})
-                    else:
-                        print(time.time(), '接收客户端的确认数据:%s\r\n' % recv_content.strip())
-                        if "Operating" in recv_content.strip():
-                            server_logger.error({"树莓派重启": time.asctime(time.localtime(time.time()))})
-                        self.receive_confirm_data = recv_content.strip()
                 if addr_dict.get(addr) in self.disconnect_client_list:
                     return
             except ValueError as e1:
-                server_logger.error({'tcp接受数据报错..': e1})
+                server_logger.error({'tcp解析数据报错..': e1})
             except IndexError as e2:
                 server_logger.error({'tcp接受数据报错..': e2})
             except Exception as e:
@@ -169,7 +191,9 @@ class TcpServer:
         try:
             if ship_id in self.client_dict.keys():
                 if data != 'S8Z':
-                    print('tcp发送数据%s\r\n' % data)
+                    server_logger.info('tcp发送数据%s\r\n' % data)
+                if self.ship_id_time_dict.get(ship_id) and time.time() - self.ship_id_time_dict.get(ship_id) > 10:
+                    raise Exception
                 # print('tcp发送数据', data, self.client_dict)
                 self.client_dict.get(ship_id).send(data.encode())
         except Exception as e:

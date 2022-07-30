@@ -230,15 +230,62 @@ class MqttSendGet:
         self.base_setting_path = config.base_setting_path.split('.')[0] + "_" + self.client_id + '.json'
         self.height_setting_path = config.height_setting_path.split('.')[0] + "_" + self.client_id + '.json'
         if not os.path.exists(self.base_setting_path):
-            copyfile(config.base_setting_path,self.base_setting_path)
+            copyfile(config.base_setting_path, self.base_setting_path)
         if not os.path.exists(self.height_setting_path):
             copyfile(config.height_setting_path, self.height_setting_path)
-        self.obstacle_avoid_type = config.obstacle_avoid_type
-        self.pre_obstacle_avoid_type = config.obstacle_avoid_type
-        self.network_backhome = config.network_backhome
-        self.pre_network_backhome = config.network_backhome
-        self.energy_backhome = config.energy_backhome
-        self.pre_energy_backhome = config.energy_backhome
+        self.obstacle_avoid_type = 0
+        self.pre_obstacle_avoid_type = 0
+        self.network_backhome = 0
+        self.pre_network_backhome = 0
+        self.energy_backhome = 0
+        self.pre_energy_backhome = 0
+        self.read_write_config()
+
+        print('self.obstacle_avoid_type',self.obstacle_avoid_type,self.energy_backhome,self.energy_backhome)
+
+    # 读取与写入配置
+    def read_write_config(self, r_w=1, b_h=1):
+        """
+        :param r_w 1：读  2：写
+        :param b_h 1：基础  2：高级
+        """
+        # 查看配置文件
+        if b_h == 1:
+            if os.path.exists(self.height_setting_path):
+                with open(self.height_setting_path, 'r') as f:
+                    self.height_setting_data = json.load(f)
+                    if self.height_setting_data.get('network_backhome') is not None:
+                        try:
+                            s_network_backhome = int(self.height_setting_data.get('network_backhome'))
+                            if s_network_backhome <= 0:
+                                s_network_backhome = 0
+                            self.network_backhome = s_network_backhome
+                        except Exception as e:
+                            self.logger.error({'获取断网返航设置错误': e})
+                    if self.height_setting_data.get('energy_backhome') is not None:
+                        try:
+                            s_energy_backhome = int(self.height_setting_data.get('energy_backhome'))
+                            if s_energy_backhome <= 0:
+                                s_energy_backhome = 0
+                            elif s_energy_backhome >= 100:
+                                s_energy_backhome = 80
+                            self.energy_backhome = s_energy_backhome
+                        except Exception as e:
+                            self.logger.error({'获取电量返航设置错误': e})
+                    if self.height_setting_data.get('obstacle_avoid_type') is not None:
+                        try:
+                            s_obstacle_avoid_type = int(self.height_setting_data.get('obstacle_avoid_type'))
+                            if s_obstacle_avoid_type in [0, 1, 2, 3, 4]:
+                                pass
+                            else:
+                                s_obstacle_avoid_type = 0
+                            self.obstacle_avoid_type = s_obstacle_avoid_type
+                        except Exception as e:
+                            print({'获取避障设置错误': e})
+        elif b_h == 2:
+            if os.path.exists(self.base_setting_path):
+                with open(self.base_setting_path, 'r') as f:
+                    self.base_setting_data = json.load(f)
 
     # 连接MQTT服务器
     def mqtt_connect(self, ):
@@ -437,7 +484,6 @@ class MqttSendGet:
                 self.logger.info({'topic': topic,
                                   'user_lng_lat_data': user_lng_lat_data,
                                   })
-
             # 用户设置自动求取检测点经纬度
             elif topic == 'auto_lng_lat_%s' % self.ship_code:
                 auto_lng_lat_data = json.loads(msg.payload)
@@ -450,7 +496,6 @@ class MqttSendGet:
                 self.row_gap = 1
                 self.logger.info({'topic': topic,
                                   'row_gap': self.row_gap})
-
             # 返回路径规划点
             elif topic == 'path_planning_%s' % self.ship_code:
                 path_planning_data = json.loads(msg.payload)
@@ -482,7 +527,6 @@ class MqttSendGet:
                                   'sampling_points': path_planning_data.get('sampling_points'),
                                   'path_points': path_planning_data.get('path_points'),
                                   })
-
             # 启动设备
             elif topic == 'start_%s' % self.ship_code:
                 start_data = json.loads(msg.payload)
@@ -491,7 +535,6 @@ class MqttSendGet:
                     return
                 self.b_start = int(start_data.get('search_pattern'))
                 self.logger.info({'topic': topic, 'b_start': start_data.get('search_pattern')})
-
             # 湖泊id
             elif topic == 'pool_info_%s' % self.ship_code:
                 pool_info_data = json.loads(msg.payload)
@@ -500,7 +543,6 @@ class MqttSendGet:
                     return
                 self.pool_code = str(pool_info_data.get('mapId'))
                 self.logger.info({'topic': topic, 'mapId': pool_info_data.get('mapId')})
-
             # 服务器从状态数据中获取 当前经纬度
             elif topic == 'status_data_%s' % self.ship_code:
                 status_data = json.loads(msg.payload)
@@ -510,7 +552,6 @@ class MqttSendGet:
                 self.current_lng_lat = status_data.get('current_lng_lat')
                 # self.logger.info({'topic': topic,
                 #                   'current_lng_lat': status_data.get('current_lng_lat')})
-
             # 基础配置
             elif topic == 'base_setting_%s' % self.ship_code:
                 self.logger.info({'base_setting ': json.loads(msg.payload)})
