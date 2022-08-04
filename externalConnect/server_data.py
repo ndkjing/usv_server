@@ -618,6 +618,7 @@ class MqttSendGet:
                                     elif s_energy_backhome >= 100:
                                         s_energy_backhome = 80
                                     self.energy_backhome = s_energy_backhome
+                                    print('##############self.energy_backhome',self.energy_backhome)
                                 except Exception as e:
                                     print({'error': e})
                             if self.height_setting_data.get('obstacle_avoid_type') is not None:

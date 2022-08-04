@@ -33,7 +33,7 @@ def vfh_func(obstacle_list, ceil_max_=None):
                 break
             index_j = index_j + 1
         index_i += 1
-    print('value_list', value_list)
+    # print('value_list', value_list)
     # 没有可以通过通道
     if len(value_list) == 0:
         return -1
@@ -44,7 +44,7 @@ def vfh_func(obstacle_list, ceil_max_=None):
             how.append(howtemp)
         ft = how.index(min(how))
         kb = value_list[int(ft)]
-        print('kb', kb, 'value_list', value_list)
+        # print('kb', kb, 'value_list', value_list)
         angle = int(kb * view_cell - field_of_view / 2)
         # 该角度为相对船头角度不是相对于北方角度  左正右负
         angle = -1 * angle

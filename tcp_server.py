@@ -75,12 +75,13 @@ class TcpServer:
     def handle_client(self, client, addr):
         addr_dict = {}
         last_send_time = time.time()  # 上次接收到避障消息时间
+        ship_id = None
         while True:
             try:
                 recv_data = client.recv(1024, 0)
                 if recv_data:
                     recv_content = recv_data.decode("gbk")
-                    ship_id_list = re.findall('[ABCDS](\d+)', recv_content)
+                    ship_id_list = re.findall('[ABCD](\d+)', recv_content)
                     if len(ship_id_list) > 0:
                         ship_id = int(ship_id_list[0])
                         self.ship_id_time_dict.update({ship_id: time.time()})
@@ -112,6 +113,7 @@ class TcpServer:
                                     self.ship_status_data_dict.update(
                                         {ship_id: [lng, lat, dump_energy, current_angle, current_mode, angle_error,
                                                    speed]})
+                                # print(time.time(),'rec_list',rec_list)
                             else:
                                 server_logger.info({ship_id: [time.time(), "接收客户端的状态数据:", recv_content]})
                         elif recv_content.startswith('B'):
@@ -124,7 +126,7 @@ class TcpServer:
                                 td = round(float(rec_list[5].split('Z')[0]) / 100.0, 2)
                                 self.ship_detect_data_dict.update(
                                     {ship_id: [wt, ph, doDo, ec, td]})
-                                server_logger.info('检测深度数据反馈消息%s\r\n' % recv_content.strip())
+                                server_logger.info({'检测深度数据反馈消息 wt, ph, doDo, ec, td': [wt, ph, doDo, ec, td]})
                             elif len(rec_list) == 2:
                                 deep = int(rec_list[1].split('Z')[0])
                                 self.ship_detect_data_dict.update(
@@ -146,6 +148,8 @@ class TcpServer:
                                 obj_id = int(rec_list[1])
                                 obj_angle = 2 * int(rec_list[2]) - 90
                                 obj_distance = int(rec_list[3].split('Z')[0]) / 100.0
+                                if obj_distance > 15.0:  # 不处理大于15米障碍物
+                                    continue
                                 if ship_id not in self.ship_obstacle_data_dict:
                                     self.ship_obstacle_data_dict.update(
                                         {ship_id: {obj_id: [obj_angle, obj_distance]}})
@@ -155,17 +159,22 @@ class TcpServer:
                                 # print(time.time(), '障碍物检测反馈消息', recv_content.strip())
                                 last_send_time = time.time()
                             # print('self.ship_obstacle_data_dict', self.ship_obstacle_data_dict)
-                        elif recv_content.startswith('S'):
-                            server_logger.info({time.time(): ['接收客户端的确认数据:%s\r\n' % recv_content]})
-                            if "Operating" in recv_content:
-                                server_logger.error({"树莓派重启": time.asctime(time.localtime(time.time()))})
-                            self.receive_confirm_data = recv_content
-                            if self.ship_id_send_dict.get(ship_id):
-                                temp_info_list = copy.copy(self.ship_id_send_dict.get(ship_id))
-                                for index, info in enumerate(temp_info_list):
-                                    if info in recv_content:
-                                        temp_info_list[index] = ""  # 接收到确认消息清空消息
-                                self.ship_id_send_dict[ship_id] = temp_info_list
+                    if recv_content.startswith('S') and ship_id:
+                        server_logger.info({time.time(): ['接收客户端的确认数据:%s\r\n' % recv_content]})
+                        if "Operating" in recv_content:
+                            server_logger.error({"树莓派重启": time.asctime(time.localtime(time.time()))})
+                        self.receive_confirm_data = recv_content
+                        # print('self.ship_id_send_dict', self.ship_id_send_dict,ship_id)
+                        if self.ship_id_send_dict.get(ship_id):
+                            temp_info_list = copy.copy(self.ship_id_send_dict.get(ship_id))
+                            # print('11111111111111self.ship_id_send_dict', self.ship_id_send_dict)
+                            for index, info in enumerate(temp_info_list):
+                                if info and 'S8' not in info and info in recv_content:
+                                    temp_info_list[index] = ""  # 接收到确认消息清空消息
+                                    print('清空设置', index, info)
+                            self.ship_id_send_dict[ship_id] = temp_info_list
+                            # print('22222222222222222self.ship_id_send_dict', self.ship_id_send_dict)
+                        # print('3333333333333333333self.ship_id_send_dict.get(ship_id)', self.ship_id_send_dict)
                         if time.time() - last_send_time > 2:
                             self.ship_obstacle_data_dict.update({ship_id: {}})
                 if addr_dict.get(addr) in self.disconnect_client_list:
@@ -190,9 +199,11 @@ class TcpServer:
     def write_data(self, ship_id, data):
         try:
             if ship_id in self.client_dict.keys():
-                if data != 'S8Z':
+                if not data.startswith('S8') and not data.startswith('S3'):
                     server_logger.info('tcp发送数据%s\r\n' % data)
+                # server_logger.info('tcp发送数据%s\r\n' % data)
                 if self.ship_id_time_dict.get(ship_id) and time.time() - self.ship_id_time_dict.get(ship_id) > 10:
+                    server_logger.error('tcp超时主动断开连接')
                     raise Exception
                 # print('tcp发送数据', data, self.client_dict)
                 self.client_dict.get(ship_id).send(data.encode())

@@ -48,8 +48,8 @@ class WaterDetect:
             #                                                    int(draw_deep * 10),
             #                                                    int(draw_capacity / 10))
             send_data = 'S2,%d,%d,%dZ' % (bottle_id,
-                                                               int(draw_deep * 10),
-                                                               int(draw_capacity / 10))
+                                          int(draw_deep * 10),
+                                          int(draw_capacity / 10))
             data_manager_obj.set_send_data(send_data, 2)
         elif data_manager_obj.b_need_stop_draw:
             # data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
@@ -1037,9 +1037,9 @@ class Adcp:
                         list) and delta_distance > data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_distance:
             self.b_send_data = True
             # print(delta_distance,'超过距离测量', data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_distance)
-        elif time.time() - self.send_data_time > data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_time:
-            self.b_send_data = True
-            # print(time.time(),'超出时间测量', data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_time)
+        # elif time.time() - self.send_data_time > data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_time:
+        #     self.b_send_data = True
+        # print(time.time(),'超出时间测量', data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp_record_time)
         if self.b_send_data and data_manager_obj.deep != -1 and data_manager_obj.deep > 0.01:
             if data_manager_obj.server_data_obj.mqtt_send_get_obj.pool_code:
                 data_manager_obj.data_define_obj.pool_code = data_manager_obj.server_data_obj.mqtt_send_get_obj.pool_code
@@ -1098,18 +1098,31 @@ class MultiDrawDetect:
         @return:
         """
         # 判断是否抽水  点击抽水情况
-        if b_draw:
+        draw_scale = 1.0  # 抽水放大系数  不同船只抽水速度不一样
+        if self.ship_id == 8:  # 8号船放大1.2倍
+            draw_scale = 1.4
+        if b_draw :
             # data_manager_obj.tcp_send_data = 'S2,%d,%d,%dZ' % (bottle_id,
             #                                                    int(draw_deep * 10),
             #                                                    int(draw_capacity / 10))
             send_data = 'S2,%d,%d,%dZ' % (bottle_id,
-                                                               int(draw_deep * 10),
-                                                               int(draw_capacity / 10))
-            data_manager_obj.set_send_data(send_data,2)
-        elif data_manager_obj.b_need_stop_draw:
+                                          int(draw_deep * 10),
+                                          int(draw_scale * draw_capacity / 10))
+            if data_manager_obj.pre_draw_info != send_data:
+                data_manager_obj.pre_draw_info = send_data
+                print('设置数据#########################')
+                data_manager_obj.set_send_data(send_data, 2)
+        else:
             # data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
             send_data = 'S2,0,0,0Z'
-            data_manager_obj.set_send_data(send_data, 2)
+            if data_manager_obj.pre_draw_info != send_data:
+                data_manager_obj.pre_draw_info = send_data
+                print('设置数据#########################')
+                data_manager_obj.set_send_data(send_data, 2)
+        # else :
+        #     # data_manager_obj.tcp_send_data = 'S2,0,0,0Z'
+        #     send_data = 'S2,0,0,0Z'
+        #     data_manager_obj.set_send_data(send_data, 2)
 
     # 判断怎么样抽水
     def draw(self, data_manager_obj):
@@ -1117,6 +1130,9 @@ class MultiDrawDetect:
         抽水控制函数
         """
         # 前端发送抽水深度和抽水时间
+        # print(data_manager_obj.server_data_obj.mqtt_send_get_obj.draw_bottle_id)
+        # print(data_manager_obj.server_data_obj.mqtt_send_get_obj.draw_deep)
+        # print(data_manager_obj.server_data_obj.mqtt_send_get_obj.draw_capacity)
         if data_manager_obj.server_data_obj.mqtt_send_get_obj.b_draw and data_manager_obj.server_data_obj.mqtt_send_get_obj.draw_bottle_id and \
                 data_manager_obj.server_data_obj.mqtt_send_get_obj.draw_deep and \
                 data_manager_obj.server_data_obj.mqtt_send_get_obj.draw_capacity:
