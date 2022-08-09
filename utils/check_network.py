@@ -23,11 +23,13 @@ def check_network():
 
 
 def get_ping_delay():
-    if config.current_platform == config.CurrentPlatform.pi:
-        (status, output) = subprocess.getstatusoutput('ping -c 4 %s' % ('www.baidu.com'))
+    if config.current_platform in [config.CurrentPlatform.pi,config.CurrentPlatform.linux]:
+        (status, output) = subprocess.getstatusoutput('ping -c 4 %s' % 'www.baidu.com')
         res = re.findall('time=(.+)ms', output)
+        # print('output', output)
     else:
-        (status, output) = subprocess.getstatusoutput('ping %s' % ('www.baidu.com'))
+        (status, output) = subprocess.getstatusoutput('ping %s' % 'www.baidu.com')
+        # print('output',output)
         res = re.findall('时间.(.+)ms', output)
     # res = re.findall('/./d+//(.+)//',output)
     res = [float(i) for i in res]

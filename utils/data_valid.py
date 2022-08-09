@@ -256,7 +256,7 @@ def run_crawl_water_data(area_id=None):
         save_data.set_data(save_data_dict, config.save_water_data_path)
         return data_dict
     else:
-        return water_data_dict
+        return None
 
 
 def get_current_water_data(area_id=None):
@@ -309,21 +309,25 @@ def get_water_data(water_type, count=1, keep_valid_decimals=None):
     :return: 返回样式[30.648319731147538, 42.35755219891315]
     """
     # 求均值
-    arr_mean = np.nanmean(water_data_dict[water_type]['data'])
-    # 求方差
-    arr_var = np.nanvar(water_data_dict[water_type]['data'])
-    return_list = []
-    for i in range(count):
-        # d = np.random.normal(arr_mean, arr_var, 1)[0]  # 依据指定的均值和协方差生成数据
-        # d = round(d,water_data_dict[water_type]['keep_valid_decimals'])
-        d = -1000
-        while d < water_data_dict[water_type]['min_data'] or d > water_data_dict[water_type]['max_data']:
-            d = np.random.normal(arr_mean, arr_var, 1)[0]  # 依据指定的均值和协方差生成数据
-            if keep_valid_decimals:
-                d = round(d, keep_valid_decimals)
-            else:
-                d = round(d, water_data_dict[water_type]['keep_valid_decimals'])
-        return_list.append(d)
+    try:
+        arr_mean = np.nanmean(water_data_dict[water_type]['data'])
+        # 求方差
+        arr_var = np.nanvar(water_data_dict[water_type]['data'])
+        return_list = []
+        for i in range(count):
+            # d = np.random.normal(arr_mean, arr_var, 1)[0]  # 依据指定的均值和协方差生成数据
+            # d = round(d,water_data_dict[water_type]['keep_valid_decimals'])
+            d = -1000
+            while d < water_data_dict[water_type]['min_data'] or d > water_data_dict[water_type]['max_data']:
+                d = np.random.normal(arr_mean, arr_var, 1)[0]  # 依据指定的均值和协方差生成数据
+                if keep_valid_decimals:
+                    d = round(d, keep_valid_decimals)
+                else:
+                    d = round(d, water_data_dict[water_type]['keep_valid_decimals'])
+            return_list.append(d)
+    except Exception as e:
+        print('get_water_data',e)
+        return_list = [0]*count
     return return_list
 
 

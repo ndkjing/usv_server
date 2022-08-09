@@ -240,8 +240,9 @@ class MqttSendGet:
         self.energy_backhome = 0
         self.pre_energy_backhome = 0
         self.read_write_config()
+        self.scan_gap = 10
 
-        print('self.obstacle_avoid_type',self.obstacle_avoid_type,self.energy_backhome,self.energy_backhome)
+        print('self.obstacle_avoid_type', self.obstacle_avoid_type, self.energy_backhome, self.energy_backhome)
 
     # 读取与写入配置
     def read_write_config(self, r_w=1, b_h=1):
@@ -568,6 +569,8 @@ class MqttSendGet:
                         with open(self.base_setting_path, 'r') as f:
                             self.base_setting_data = json.load(f)
                     elif info_type == 2:
+                        if base_setting_data.get("arrive_range"):
+                            self.scan_gap = int(base_setting_data.get("arrive_range"))
                         with open(self.base_setting_path, 'r') as f:
                             self.base_setting_data = json.load(f)
                         with open(self.base_setting_path, 'w') as f:
@@ -618,7 +621,7 @@ class MqttSendGet:
                                     elif s_energy_backhome >= 100:
                                         s_energy_backhome = 80
                                     self.energy_backhome = s_energy_backhome
-                                    print('##############self.energy_backhome',self.energy_backhome)
+                                    print('##############self.energy_backhome', self.energy_backhome)
                                 except Exception as e:
                                     print({'error': e})
                             if self.height_setting_data.get('obstacle_avoid_type') is not None:

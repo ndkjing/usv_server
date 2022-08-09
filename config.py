@@ -3,7 +3,7 @@ import enum
 import json
 import os
 import platform
-
+import gaode_keys
 root_path = os.path.dirname(os.path.abspath(__file__))
 maps_dir = os.path.join(root_path, 'statics', 'mapsData')
 if not os.path.exists(os.path.join(root_path, 'statics')):
@@ -50,7 +50,7 @@ ship_code_type_dict = {
     'XXLJC4LCGSCSD1DA008': ShipType.multi_draw_detect
 }
 ship_id = 8  # 设备id
-ship_code = 'XXLJC4LCGSCSD1DA00'+str(ship_id)
+ship_code = 'XXLJC4LCGSCSD1DA00' + str(ship_id)
 
 # current_ship_type = ship_code_type_dict.get(ship_code)
 sysstr = platform.system()
@@ -72,10 +72,12 @@ if current_platform == CurrentPlatform.pi:
     home_debug = 0
 else:
     home_debug = 1
+print('current_platform', current_platform)
 # 百度地图key
 baidu_key = 'wIt2mDCMGWRIi2pioR8GZnfrhSKQHzLY'
 # 高德秘钥
-gaode_key = '8177df6428097c5e23d3280ffdc5a13a'
+init_key_index=0
+gaode_key = gaode_keys.key_lists[init_key_index]
 # 腾讯地图key
 tencent_key = 'PSABZ-URMWP-3ATDK-VBRCR-FBBMF-YHFCE'
 
@@ -513,6 +515,6 @@ obstacle_points = [[114.523433, 30.506193],
 forward_target_distance = 10  # 前进寻找下一点距离
 remote_control_outtime = 2  # 接受不到遥控器消息后断开遥控器使能时间单位秒
 
-deep_recoup=0.08 # 深度补偿值 单位米
+deep_recoup = 0.08  # 深度补偿值 单位米
 if __name__ == '__main__':
     write_setting(True, True, True, True)
