@@ -266,8 +266,8 @@ class DataManager:
                             if self.ship_status not in [ShipStatus.computer_auto, ShipStatus.backhome_network,
                                                         ShipStatus.backhome_low_energy] and 'S1' in info:
                                 continue
-                            if self.ship_status != ShipStatus.computer_control and 'S3' in info:
-                                continue
+                            # if self.ship_status != ShipStatus.computer_control and 'S3' in info:
+                            #     continue
                             if info.startswith('S3'):
                                 if control_data == info:
                                     control_count -= 1
@@ -404,6 +404,7 @@ class DataManager:
                 # 取消自动模式
                 elif self.server_data_obj.mqtt_send_get_obj.control_move_direction == -1:
                     self.server_data_obj.mqtt_send_get_obj.control_move_direction = -2
+                    print('dsadadsdsad',self.server_data_obj.mqtt_send_get_obj.control_move_direction)
                     self.clear_all_status()  # 取消自动时清楚所有自动信息标记
                     self.ship_status = ShipStatus.computer_control
                 # 被暂停切换到手动
@@ -429,6 +430,7 @@ class DataManager:
                     # 如果自动每个点均已经到达
                     if len(self.server_data_obj.mqtt_send_get_obj.sampling_points_status) > 0 and \
                             all(self.server_data_obj.mqtt_send_get_obj.sampling_points_status):
+                        print('self.server_data_obj.mqtt_send_get_obj.sampling_points_status',self.server_data_obj.mqtt_send_get_obj.sampling_points_status)
                         self.clear_all_status()  # 最后一个任务点也到达后清楚状态
                         self.ship_status = ShipStatus.computer_control
                         # 自动模式下到达最后一个点切换为电脑手动状态
@@ -739,6 +741,9 @@ class DataManager:
                         self.server_data_obj.mqtt_send_get_obj.sampling_points_gps.append(sampling_point_gps)
                     self.path_info = [0, len(self.server_data_obj.mqtt_send_get_obj.sampling_points)]
                 while self.server_data_obj.mqtt_send_get_obj.sampling_points_status.count(0) > 0:
+                    # 清空经纬度不让船移动
+                    # control_data = ''
+                    # self.set_send_data(control_data, 3)
                     # 被暂停
                     if self.server_data_obj.mqtt_send_get_obj.pause_continue_data_type == 1:
                         if self.ship_status != ShipStatus.computer_auto:  # 暂停时允许使用遥控器取消暂停状态
@@ -767,11 +772,12 @@ class DataManager:
                                                                                       sampling_point_gps[1])
 
                     # 调试用 10秒后认为到达目的点
-                    if self.point_arrive_start_time is None:
-                        self.point_arrive_start_time = time.time()
-                    if time.time() - self.point_arrive_start_time > 10:
-                        arrive_sample_distance = 1
+                    # if self.point_arrive_start_time is None:
+                    #     self.point_arrive_start_time = time.time()
+                    # if time.time() - self.point_arrive_start_time > 10:
+                    #     arrive_sample_distance = 1
                     # 如果该点已经到达目的地
+                    # print('arrive_sample_distance',arrive_sample_distance,self.lng_lat,sampling_point_gps)
                     if arrive_sample_distance < config.arrive_distance:
                         # 清空经纬度不让船移动
                         control_data = 'S3,-1,3Z'

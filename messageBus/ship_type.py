@@ -70,6 +70,8 @@ class WaterDetect:
         draw_scale = 1.0  # 抽水放大系数  不同船只抽水速度不一样
         if self.ship_id == 8:  # 8号船放大1.2倍
             draw_scale = 0.75
+        if self.ship_id == 9:  # 9号船放大1.2倍
+            draw_scale = 1.45
         if b_draw:
             send_data = 'S2,%d,%d,%dZ' % (bottle_id,
                                           int(draw_deep * 10),

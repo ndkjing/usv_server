@@ -47,7 +47,9 @@ ship_code_type_dict = {
     'XXLJC4LCGSCSD1DA004': ShipType.multi_draw,
     'XXLJC4LCGSCSD1DA005': ShipType.water_detect,
     'XXLJC4LCGSCSD1DA007': ShipType.adcp,
-    'XXLJC4LCGSCSD1DA008': ShipType.multi_draw_detect
+    'XXLJC4LCGSCSD1DA008': ShipType.multi_draw_detect,
+    'XXLJC4LCGSCSD1DA009': ShipType.water_detect,
+    'XXLJC4LCGSCSD1DA010': ShipType.multi_draw_detect,
 }
 ship_id = 8  # 设备id
 ship_code = 'XXLJC4LCGSCSD1DA00' + str(ship_id)
@@ -76,7 +78,7 @@ print('current_platform', current_platform)
 # 百度地图key
 baidu_key = 'wIt2mDCMGWRIi2pioR8GZnfrhSKQHzLY'
 # 高德秘钥
-init_key_index=0
+init_key_index=2
 gaode_key = gaode_keys.key_lists[init_key_index]
 # 腾讯地图key
 tencent_key = 'PSABZ-URMWP-3ATDK-VBRCR-FBBMF-YHFCE'
