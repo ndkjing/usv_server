@@ -226,7 +226,7 @@ class MqttSendGet:
         self.adcp_record_distance = 1
         self.adcp_record_time = 1
         self.adcp_info_type = None
-        self.adcp = 1  # adcp 开关信息
+        self.adcp = 0  # adcp 开关信息
         self.base_setting_path = config.base_setting_path.split('.')[0] + "_" + self.client_id + '.json'
         self.height_setting_path = config.height_setting_path.split('.')[0] + "_" + self.client_id + '.json'
         if not os.path.exists(self.base_setting_path):
@@ -241,8 +241,9 @@ class MqttSendGet:
         self.pre_energy_backhome = 0
         self.read_write_config()
         self.scan_gap = 10
-
-        print('self.obstacle_avoid_type', self.obstacle_avoid_type, self.energy_backhome, self.energy_backhome)
+        self.max_pwm_grade = 3  # 自动速度等级
+        self.pre_max_pwm_grade = 3  # 自动速度等级
+        # print('self.obstacle_avoid_type', self.obstacle_avoid_type, self.energy_backhome, self.energy_backhome)
 
     # 读取与写入配置
     def read_write_config(self, r_w=1, b_h=1):
@@ -283,6 +284,13 @@ class MqttSendGet:
                             self.obstacle_avoid_type = s_obstacle_avoid_type
                         except Exception as e:
                             print({'获取避障设置错误': e})
+                    if self.height_setting_data.get('max_pwm'):
+                        s_max_pwm = int(self.height_setting_data.get('max_pwm'))
+                        if s_max_pwm >= 2000:
+                            s_max_pwm = 2000
+                        max_pwm = s_max_pwm
+                        self.max_pwm_grade = int((max_pwm - 1500) / 100)
+                    print("self.max_pwm_grade", self.max_pwm_grade)
         elif b_h == 2:
             if os.path.exists(self.base_setting_path):
                 with open(self.base_setting_path, 'r') as f:
@@ -525,8 +533,7 @@ class MqttSendGet:
                     }
                     send_http_log(request_type="POST", data=send_log_data, url=config.http_log)
                 self.logger.info({'topic': topic,
-                                  'sampling_points': path_planning_data.get('sampling_points'),
-                                  'path_points': path_planning_data.get('path_points'),
+                                  '路径规划数据': path_planning_data
                                   })
             # 启动设备
             elif topic == 'start_%s' % self.ship_code:
@@ -590,6 +597,13 @@ class MqttSendGet:
             elif topic == 'height_setting_%s' % self.ship_code:
                 self.logger.info({'height_setting_data': json.loads(msg.payload)})
                 height_setting_data = json.loads(msg.payload)
+                if height_setting_data.get('max_pwm'):
+                    s_max_pwm = int(height_setting_data.get('max_pwm'))
+                    if s_max_pwm >= 2000:
+                        s_max_pwm = 2000
+                    max_pwm = s_max_pwm
+                    self.max_pwm_grade = int((max_pwm - 1500) / 100)
+                print("self.max_pwm_grade", self.max_pwm_grade)
                 if height_setting_data.get("info_type") is None:
                     self.logger.error('"height_setting_data"设置启动消息没有"info_type"字段')
                     return

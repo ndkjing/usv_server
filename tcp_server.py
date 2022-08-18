@@ -26,13 +26,15 @@ server_logger = log.LogHandler('server_log', level=20)
 
 @singleton
 class TcpServer:
-    def __init__(self):
+    def __init__(self, main_obj):
+        self.main_obj = main_obj
         self.bind_ip = server_config.tcp_server_ip  # 监听所有可用的接口
         self.bind_port = server_config.tcp_server_port  # 非特权端口号都可以使用
         # AF_INET：使用标准的IPv4地址或主机名，SOCK_STREAM：说明这是一个TCP服务器
         self.tcp_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # 服务器监听的ip和端口号
         self.tcp_server_socket.bind((self.bind_ip, self.bind_port))
+
         print("[*] Listening on %s:%d" % (self.bind_ip, self.bind_port))
         self.tcp_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
         # 最大连接数
@@ -54,23 +56,35 @@ class TcpServer:
 
     def wait_connect(self):
         # 等待客户连接，连接成功后，将socket对象保存到client，将细节数据等保存到addr
+        if self.main_obj.is_close:
+            return
         client, addr = self.tcp_server_socket.accept()
-        print("客户端的ip地址和端口号为:", addr)
         self.b_connect = 1
         self.client = client
 
     def start_server(self):
+        self.tcp_server_socket.settimeout(3)
+        print('tcp超时时间:', self.tcp_server_socket.gettimeout())
         while True:
             # 等待客户连接，连接成功后，将socket对象保存到client，将细节数据等保存到addr
-            client, addr = self.tcp_server_socket.accept()
-            server_logger.info({time.time(): ["客户端的ip地址和端口号为:", addr]})
-            # 代码执行到此，说明客户端和服务端套接字建立连接成功
-            client_handler = threading.Thread(target=self.handle_client, args=(client, addr))
-            # 子线程守护主线程
-            # client_handler.setDaemon(True)
-            client_handler.start()
-            time.sleep(0.5)
-            print('start_server.....')
+            try:
+                client, addr = self.tcp_server_socket.accept()
+                server_logger.info({time.time(): ["客户端的ip地址和端口号为:", addr]})
+                # 代码执行到此，说明客户端和服务端套接字建立连接成功
+                client_handler = threading.Thread(target=self.handle_client, args=(client, addr))
+                # 子线程守护主线程
+                client_handler.setDaemon(True)
+                client_handler.start()
+                time.sleep(0.5)
+            except socket.timeout as e:
+                if self.main_obj.is_close:
+                    self.close()
+                    print('主动断开')
+                    return
+            except OSError as e1:
+                server_logger.error({'OSError': e1})
+                self.close()
+                return
 
     # 客户处理线程
     def handle_client(self, client, addr):
@@ -81,6 +95,8 @@ class TcpServer:
         pre_log_detect_time = 0
         while True:
             try:
+                if self.main_obj.is_close:
+                    return
                 recv_data = client.recv(1024, 0)
                 # print(time.time(), 'recv_data', recv_data)
                 if recv_data:
@@ -216,6 +232,8 @@ class TcpServer:
         self.tcp_server_socket.close()
 
     def write_data(self, ship_id, data):
+        if self.main_obj.is_close:
+            return
         try:
             if ship_id in self.client_dict.keys():
                 if not data.startswith('S8'):

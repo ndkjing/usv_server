@@ -163,6 +163,7 @@ class DataManager:
         self.send_data_list = ["", "", "", "", "", "", "", "", "S8Z"]  # 空位 经纬度 开关  手动控制 设置 pid 罗盘校准 抽水杆 心跳
         self.tcp_server_obj.ship_id_send_dict.update({ship_id: self.send_data_list})
         self.pre_draw_info = 'S2,0,0,0Z'
+        self.control_data = ''
 
     def thread_control(self):
         # 通用调用函数
@@ -251,7 +252,6 @@ class DataManager:
         # 不同消息发送间隔 每个循环20ms  控制数次每次都发  其他数据20次发一次
         init_count = 20
         count = 0
-        control_data = ''
         control_count = 10  # 同样的控制数据最多发十次
         while True:
             time.sleep(0.05)
@@ -269,17 +269,19 @@ class DataManager:
                             # if self.ship_status != ShipStatus.computer_control and 'S3' in info:
                             #     continue
                             if info.startswith('S3'):
-                                if control_data == info:
+                                if self.control_data == info:
                                     control_count -= 1
                                     control_count = max(control_count, -1)
                                 else:
                                     control_count = 10
                                 if control_count > 0:
                                     self.tcp_server_obj.write_data(self.ship_id, info)
-                                control_data = info
+                                self.control_data = info
                             else:
                                 self.tcp_server_obj.write_data(self.ship_id, info)
                             # self.tcp_server_obj.write_data(self.ship_id, info)
+                            # if info.startswith('S1'):
+                            #     control_data=''
                             time.sleep(0.05)
                 count += 1
                 if count > init_count:
@@ -403,8 +405,8 @@ class DataManager:
                     self.last_ship_status = ShipStatus.computer_auto
                 # 取消自动模式
                 elif self.server_data_obj.mqtt_send_get_obj.control_move_direction == -1:
-                    self.server_data_obj.mqtt_send_get_obj.control_move_direction = -2
-                    print('dsadadsdsad',self.server_data_obj.mqtt_send_get_obj.control_move_direction)
+                    # self.server_data_obj.mqtt_send_get_obj.control_move_direction = -2
+                    self.control_data = ''
                     self.clear_all_status()  # 取消自动时清楚所有自动信息标记
                     self.ship_status = ShipStatus.computer_control
                 # 被暂停切换到手动
@@ -430,7 +432,8 @@ class DataManager:
                     # 如果自动每个点均已经到达
                     if len(self.server_data_obj.mqtt_send_get_obj.sampling_points_status) > 0 and \
                             all(self.server_data_obj.mqtt_send_get_obj.sampling_points_status):
-                        print('self.server_data_obj.mqtt_send_get_obj.sampling_points_status',self.server_data_obj.mqtt_send_get_obj.sampling_points_status)
+                        print('self.server_data_obj.mqtt_send_get_obj.sampling_points_status',
+                              self.server_data_obj.mqtt_send_get_obj.sampling_points_status)
                         self.clear_all_status()  # 最后一个任务点也到达后清楚状态
                         self.ship_status = ShipStatus.computer_control
                         # 自动模式下到达最后一个点切换为电脑手动状态
@@ -675,6 +678,7 @@ class DataManager:
                     self.control_info += control_info_dict[self.ship_status]
             # 电脑手动
             if self.ship_status == ShipStatus.computer_control or self.ship_status == ShipStatus.tasking:
+                # print('self.server_data_obj.mqtt_send_get_obj.rocker_angle',self.server_data_obj.mqtt_send_get_obj.rocker_angle,)
                 if 0 <= self.server_data_obj.mqtt_send_get_obj.rocker_angle < 360:
                     #         90                0
                     # 将  180       0  ->   90        270
@@ -698,6 +702,7 @@ class DataManager:
                         stop_pause = 4
                     else:
                         stop_pause = 1
+                    # print('self.direction  pause_continue_data_type',self.direction,self.server_data_obj.mqtt_send_get_obj.pause_continue_data_type)
                     if stop_pause:
                         control_data = 'S3,%d,%dZ' % (
                             self.server_data_obj.mqtt_send_get_obj.rocker_angle, stop_pause)
@@ -772,23 +777,25 @@ class DataManager:
                                                                                       sampling_point_gps[1])
 
                     # 调试用 10秒后认为到达目的点
-                    # if self.point_arrive_start_time is None:
-                    #     self.point_arrive_start_time = time.time()
-                    # if time.time() - self.point_arrive_start_time > 10:
-                    #     arrive_sample_distance = 1
+                    if config.current_platform == config.CurrentPlatform.windows:
+                        if self.point_arrive_start_time is None:
+                            self.point_arrive_start_time = time.time()
+                        if time.time() - self.point_arrive_start_time > 10:
+                            arrive_sample_distance = 1
                     # 如果该点已经到达目的地
                     # print('arrive_sample_distance',arrive_sample_distance,self.lng_lat,sampling_point_gps)
                     if arrive_sample_distance < config.arrive_distance:
                         # 清空经纬度不让船移动
-                        control_data = 'S3,-1,3Z'
-                        self.set_send_data(control_data, 3)
+                        if index != 0:
+                            control_data = 'S3,-1,3Z'
+                            self.set_send_data(control_data, 3)
                         # 判断是否是行动抽水
                         if self.action_id and self.sample_index and self.sample_index[index]:
                             self.b_arrive_point = 1  # 到点了用于通知抽水  暂时修改为不抽水
                             self.current_arriver_index = index  # 当前到达点下标
                             print('######################################到达下标点################',
                                   self.current_arriver_index)
-                        if self.ship_type_obj.ship_type == config.ShipType.water_detect and index!=0:
+                        if self.ship_type_obj.ship_type == config.ShipType.water_detect and index != 0:
                             self.b_arrive_point = 1  # 到点了用于通知抽水
                         self.point_arrive_start_time = None
                         self.server_data_obj.mqtt_send_get_obj.sampling_points_status[index] = 1
@@ -805,6 +812,7 @@ class DataManager:
                             send_lng_lat = next_lng_lat
                         if self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != 0:
                             send_lng_lat, b_stop = self.get_avoid_obstacle_point(send_lng_lat, sampling_point_gps)
+
                         send_data = 'S1,%d,%dZ' % (
                             round(send_lng_lat[0], 6) * 1000000, round(send_lng_lat[1], 6) * 1000000)
                         # self.tcp_send_data = send_data
@@ -878,7 +886,8 @@ class DataManager:
                         if self.tcp_server_obj.ship_status_data_dict.get(self.ship_id):
                             speed_scale = 1.2  # 速度放大比例
 
-                            self.speed = round(speed_scale*self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6],1)
+                            self.speed = round(
+                                speed_scale * self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6], 1)
                             # print('sudu',self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6],self.speed)
                         # self.speed = round(speed_distance / (time.time() - last_read_time), 1)
                         # 替换上一次的值
@@ -1058,7 +1067,8 @@ class DataManager:
             #                 self.dump_energy_deque))
             if self.server_data_obj.mqtt_send_get_obj.energy_backhome != self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome or \
                     self.server_data_obj.mqtt_send_get_obj.network_backhome != self.server_data_obj.mqtt_send_get_obj.pre_network_backhome or \
-                    self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type:
+                    self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type != self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type or \
+                    self.server_data_obj.mqtt_send_get_obj.max_pwm_grade != self.server_data_obj.mqtt_send_get_obj.pre_max_pwm_grade:
                 if self.server_data_obj.mqtt_send_get_obj.network_backhome != 0:
                     n = 1
                 else:
@@ -1071,13 +1081,14 @@ class DataManager:
                     o = 1
                 else:
                     o = 0
-                send_data = 'S4,%d,%d,%d,3,3Z' % (n, e, o)
+                send_data = 'S4,%d,%d,%d,3,%dZ' % (n, e, o, self.server_data_obj.mqtt_send_get_obj.max_pwm_grade)
                 print('######## 设置改变##############')
                 # self.tcp_send_data = 'S4,%d,%d,%d,3,3Z' % (n, e, o)
                 self.set_send_data(send_data, 4)
                 self.server_data_obj.mqtt_send_get_obj.pre_energy_backhome = self.server_data_obj.mqtt_send_get_obj.energy_backhome
                 self.server_data_obj.mqtt_send_get_obj.pre_network_backhome = self.server_data_obj.mqtt_send_get_obj.network_backhome
                 self.server_data_obj.mqtt_send_get_obj.pre_obstacle_avoid_type = self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_type
+                self.server_data_obj.mqtt_send_get_obj.pre_max_pwm_grade = self.server_data_obj.mqtt_send_get_obj.max_pwm_grade
             # 接收到重置湖泊按钮
             if self.server_data_obj.mqtt_send_get_obj.reset_pool_click:
                 self.data_define_obj.pool_code = ''
