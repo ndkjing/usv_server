@@ -94,6 +94,7 @@ class DataManager:
         self.gaode_lng_lat = None
         # 记录上一次经纬度
         self.last_lng_lat = None
+        self.last_get_gaode_lng_lat = None  # 上一次请求高德经纬度的经纬度
         # 记录船状态
         self.ship_status = ShipStatus.idle
         # 记录平滑路径
@@ -215,35 +216,6 @@ class DataManager:
                 self.server_data_obj.mqtt_send_get_obj.break_connect()
                 self.logger.info("船断线mqtt主动断开连接。。。")
                 time.sleep(2)
-
-    # def loop_send_tcp_data(self):
-    #     pre_control_data = ''
-    #     while True:
-    #         time.sleep(0.03)
-    #         if self.ship_id in self.tcp_server_obj.disconnect_client_list:
-    #             self.logger.info({"船只断开连接退出线程": self.ship_id})
-    #             return
-    #         if self.tcp_send_data == 'S8Z':
-    #             self.tcp_server_obj.write_data(self.ship_id, 'S8Z')
-    #             time.sleep(0.02)
-    #             self.tcp_send_data = ""
-    #         else:
-    #             # 需要发送数据且发送的数据与接受确认数据不相等
-    #             if self.tcp_send_data and self.tcp_send_data not in self.tcp_server_obj.receive_confirm_data:
-    #                 self.tcp_current_data = self.tcp_send_data
-    #             # 如果有需要发送数据且不是一样的控制数据
-    #             if self.tcp_current_data and pre_control_data != self.tcp_current_data:
-    #                 self.tcp_server_obj.write_data(self.ship_id, self.tcp_current_data)
-    #                 time.sleep(0.02)
-    #             if self.tcp_current_data == 'S8Z' or self.tcp_current_data.startswith('S3'):
-    #                 self.tcp_current_data = ""
-    #             if self.tcp_current_data.startswith('S3'):
-    #                 pre_control_data = self.tcp_current_data
-    #             if self.tcp_current_data in self.tcp_server_obj.receive_confirm_data:
-    #                 if self.tcp_current_data == 'S2,0,0,0Z':
-    #                     self.b_need_stop_draw = 0
-    #                 self.tcp_current_data = ""
-    #                 self.tcp_send_data = ""
 
     def set_send_data(self, data, index):
         self.tcp_server_obj.ship_id_send_dict.get(self.ship_id)[index] = data
@@ -551,7 +523,8 @@ class DataManager:
         distance_list = []
         start_index = self.smooth_path_lng_lat_index[index_]
         cal_lng_lat = self.lng_lat
-        # print('self.smooth_path_lng_lat, index_,', self.smooth_path_lng_lat_index, index_)
+        # print('self.smooth_path_lng_lat, index_,', self.smooth_path_lng_lat_index, len(self.smooth_path_lng_lat),
+        #       index_)
         # 限制后面路径点寻找时候不能找到之前采样点路径上
         if index_ == 0:
             self.search_list = copy.deepcopy(self.smooth_path_lng_lat[:start_index])
@@ -564,6 +537,7 @@ class DataManager:
                                                                 target_lng_lat[0],
                                                                 target_lng_lat[1])
             distance_list.append(distance)
+        # print('distance_list',distance_list)
         # 如果没有可以去路径
         if len(distance_list) == 0:
             return self.server_data_obj.mqtt_send_get_obj.sampling_points_gps[index_]
@@ -582,7 +556,7 @@ class DataManager:
                                                                             cal_lng_lat[1],
                                                                             lng_lat[0],
                                                                             lng_lat[1])
-            if config.forward_target_distance < index_point_distance:
+            if config.forward_target_distance * 1.2 < index_point_distance:
                 break
             index += 1
         # 超过第一个点后需要累积之前计数
@@ -777,11 +751,11 @@ class DataManager:
                                                                                       sampling_point_gps[1])
 
                     # 调试用 10秒后认为到达目的点
-                    if config.current_platform == config.CurrentPlatform.windows:
-                        if self.point_arrive_start_time is None:
-                            self.point_arrive_start_time = time.time()
-                        if time.time() - self.point_arrive_start_time > 10:
-                            arrive_sample_distance = 1
+                    # if config.current_platform == config.CurrentPlatform.windows:
+                    #     if self.point_arrive_start_time is None:
+                    #         self.point_arrive_start_time = time.time()
+                    #     if time.time() - self.point_arrive_start_time > 10:
+                    #         arrive_sample_distance = 1
                     # 如果该点已经到达目的地
                     # print('arrive_sample_distance',arrive_sample_distance,self.lng_lat,sampling_point_gps)
                     if arrive_sample_distance < config.arrive_distance:
@@ -842,18 +816,31 @@ class DataManager:
     def update_ship_gaode_lng_lat(self):
         # 更新经纬度为高德经纬度
         while True:
-            time.sleep(3)
+            time.sleep(1.5)
             if self.ship_id in self.tcp_server_obj.disconnect_client_list:
                 self.logger.info({"船只断开连接退出线程": self.ship_id})
                 return
             if self.lng_lat is not None:
                 try:
-                    gaode_lng_lat = baidu_map.BaiduMap.gps_to_gaode_lng_lat(self.lng_lat)
-                    if gaode_lng_lat:
-                        self.gaode_lng_lat = gaode_lng_lat
-                        if not self.home_lng_lat:
-                            self.home_lng_lat = copy.deepcopy(self.lng_lat)
-                            self.home_gaode_lng_lat = copy.deepcopy(self.gaode_lng_lat)
+                    b_request_gaode = 0  # 是否请求高德
+                    if self.last_get_gaode_lng_lat:
+                        # 如果移动距离超过1m才请求不然不发送请求
+                        speed_distance = lng_lat_calculate.distanceFromCoordinate(self.last_get_gaode_lng_lat[0],
+                                                                                  self.last_get_gaode_lng_lat[1],
+                                                                                  self.lng_lat[0],
+                                                                                  self.lng_lat[1])
+                        if speed_distance > 1:
+                            b_request_gaode = 1
+                    else:
+                        b_request_gaode = 1
+                    if b_request_gaode:
+                        gaode_lng_lat = baidu_map.BaiduMap.gps_to_gaode_lng_lat(self.lng_lat)
+                        if gaode_lng_lat:
+                            self.gaode_lng_lat = gaode_lng_lat
+                            self.last_get_gaode_lng_lat = copy.deepcopy(self.lng_lat)
+                            if not self.home_lng_lat:
+                                self.home_lng_lat = copy.deepcopy(self.lng_lat)
+                                self.home_gaode_lng_lat = copy.deepcopy(self.gaode_lng_lat)
                 except Exception as e:
                     self.logger.error({'error': e})
 
@@ -885,7 +872,6 @@ class DataManager:
                         self.run_distance += speed_distance
                         if self.tcp_server_obj.ship_status_data_dict.get(self.ship_id):
                             speed_scale = 1.2  # 速度放大比例
-
                             self.speed = round(
                                 speed_scale * self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6], 1)
                             # print('sudu',self.tcp_server_obj.ship_status_data_dict.get(self.ship_id)[6],self.speed)
@@ -1204,6 +1190,7 @@ class DataManager:
             if not self.server_data_obj.mqtt_send_get_obj.is_connected:
                 continue
             distance_info_data = {}
+            # print('避障距离:', self.server_data_obj.mqtt_send_get_obj.obstacle_avoid_distance)
             self.obstacle_list = [0] * self.cell_size
             if self.tcp_server_obj.ship_obstacle_data_dict.get(self.ship_id):
                 distance_info_data.update({'deviceId': self.ship_code})
@@ -1242,7 +1229,7 @@ class DataManager:
                 else:
                     distance_info_data.update({'direction': 0})
                 # print('self.obstacle_list', self.obstacle_list, self.ceil_go_throw)
-                # print("distance_info_data", distance_info_data)
+                print("障碍物数据:", distance_info_data)
                 self.send(method='mqtt',
                           topic='distance_info_%s' % self.ship_code,
                           data=distance_info_data,
@@ -1361,9 +1348,9 @@ class DataManager:
                     len(self.server_data_obj.mqtt_send_get_obj.surrounded_points) > 0 and \
                     config.scan_gap:
                 print('surrounded_points,config.scan_gap', self.server_data_obj.mqtt_send_get_obj.surrounded_points,
-                      config.scan_gap)
+                      self.server_data_obj.mqtt_send_get_obj.scan_gap)
                 scan_points = baidu_map.BaiduMap.scan_area(self.server_data_obj.mqtt_send_get_obj.surrounded_points,
-                                                           config.scan_gap)
+                                                           self.server_data_obj.mqtt_send_get_obj.scan_gap)
                 if scan_points:
                     self.send(method='mqtt',
                               topic='surrounded_path_%s' % self.ship_code,

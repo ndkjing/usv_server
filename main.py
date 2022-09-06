@@ -29,7 +29,8 @@ def main():
         try:
             for ship_id in list(main_obj.tcp_server_obj.client_dict.keys()):
                 if ship_id not in main_obj.damanager_dict:
-                    if 'XXLJC4LCGSCSD1DA00' + str(ship_id) not in config.ship_code_type_dict:
+                    # 判断是否是在线船只
+                    if 'XXLJC4LCGSCSD1DA%03d' % ship_id not in config.ship_code_type_dict:
                         continue
                     logger.info({'新船上线': ship_id})
                     main_obj.damanager_dict[ship_id] = data_manager.DataManager(ship_id=ship_id,
@@ -51,9 +52,9 @@ def main():
                     main_obj.tcp_server_obj.tcp_server_socket.detach()
                     main_obj.is_close = 1
                     logger.info({'主动结束...': e})
-                    time.sleep(5)
+                    time.sleep(8)
                     return
-                except KeyboardInterrupt as e1:
+                except Exception as e1:
                     print('不要多次CTRL+C...')
 
 

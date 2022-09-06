@@ -1067,8 +1067,7 @@ class Adcp:
 
     # 上传数据
     def send_data(self, data_manager_obj):
-        # 没有数据 偏差距离不变
-        if not data_manager_obj.lng_lat or not data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp:
+        if not data_manager_obj.lng_lat:
             return
         if isinstance(self.send_data_lng_lat, list):
             delta_distance = lng_lat_calculate.distanceFromCoordinate(self.send_data_lng_lat[0],
@@ -1102,16 +1101,24 @@ class Adcp:
             deep_data.update({'gjwd': json.dumps(data_manager_obj.gaode_lng_lat)})
             if data_manager_obj.action_id:
                 deep_data.update({'planId': data_manager_obj.action_id})
-                # if data_manager_obj.creator:
-                #     deep_data.update({"creator": data_manager_obj.creator})
-            if data_manager_obj.action_id:
-                deep_data.update({'planId': data_manager_obj.action_id})
             data_manager_obj.send(method='mqtt', topic='deep_data_%s' % data_manager_obj.ship_code,
                                   data={'deep': data_manager_obj.deep},
                                   qos=0)
+            """
+            {
+            'deep':12,
+            'deviceId':'XXLJC4LCGSCSD1DA007',
+            'mapId':1539911190092759042,
+            'jwd':[114.321321,31.312231]
+            'gjwd':[114.121321,31.112231]
+            }
+            """
             # 发送到服务器
             if len(data_manager_obj.data_define_obj.pool_code) > 0:
                 try:
+                                        # 没有数据 偏差距离不变
+                    if not data_manager_obj.lng_lat or not data_manager_obj.server_data_obj.mqtt_send_get_obj.adcp:
+                        return
                     print('深度数据', deep_data)
                     return_data = data_manager_obj.server_data_obj.send_server_http_data('POST',
                                                                                          deep_data,

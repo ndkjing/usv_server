@@ -369,7 +369,7 @@ class BaiduMap(object):
                 adcode = address_response_data.get('regeocode').get('addressComponent').get('adcode')
                 return adcode
         except Exception as e:
-            print('请求高德地图经纬度对应城市编码失败',e)
+            print('请求高德地图经纬度对应城市编码失败', e)
 
     # 按照经纬度url获取静态图
     def draw_image(self, ):
@@ -452,10 +452,13 @@ class BaiduMap(object):
                 lng_lat="%f,%f" % (lng_lat[0], lng_lat[1]), key=config.gaode_key)
             response = requests.get(url=url)
             response = json.loads(response.content)
-            gaode_lng_lat = [round(float(i),6) for i in response['locations'].split(',')]
+            gaode_lng_lat = [round(float(i), 6) for i in response['locations'].split(',')]
             return gaode_lng_lat
+        except KeyError as e1:
+            pass
+            # 更换ip
         except Exception as e:
-            print({'经纬度转换为高德经纬度报错':e})
+            print({'经纬度转换为高德经纬度报错': e})
 
     def gaode_lng_lat_to_pix(self, gaode_lng_lat):
         """
@@ -851,8 +854,8 @@ if __name__ == '__main__':
     return_gps_list1.append(return_gps_list1[0])
     coordinates.append(return_gps_list1)
     geojson_dict["coordinates"] = coordinates
-    with open("test_geojson.json",'w') as f:
-        json.dump(geojson_dict,f)
+    with open("test_geojson.json", 'w') as f:
+        json.dump(geojson_dict, f)
     # print(return_gps, return_gps_list)
     # print(return_gps1, return_gps_list1)
     # # obj.build_obstacle_map(False)

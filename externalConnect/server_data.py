@@ -234,15 +234,16 @@ class MqttSendGet:
         if not os.path.exists(self.height_setting_path):
             copyfile(config.height_setting_path, self.height_setting_path)
         self.obstacle_avoid_type = 0
+        self.obstacle_avoid_distance = 10  # 避障距离
         self.pre_obstacle_avoid_type = 0
         self.network_backhome = 0
         self.pre_network_backhome = 0
         self.energy_backhome = 0
         self.pre_energy_backhome = 0
-        self.read_write_config()
-        self.scan_gap = 10
         self.max_pwm_grade = 3  # 自动速度等级
         self.pre_max_pwm_grade = 3  # 自动速度等级
+        self.read_write_config()
+        self.scan_gap = 10
         # print('self.obstacle_avoid_type', self.obstacle_avoid_type, self.energy_backhome, self.energy_backhome)
 
     # 读取与写入配置
@@ -284,6 +285,13 @@ class MqttSendGet:
                             self.obstacle_avoid_type = s_obstacle_avoid_type
                         except Exception as e:
                             print({'获取避障设置错误': e})
+                    if self.height_setting_data.get('obstacle_avoid_distance') is not None:
+                        try:
+                            s_obstacle_avoid_distance = int(self.height_setting_data.get('obstacle_avoid_distance'))
+                            if 1 < s_obstacle_avoid_distance < 50:
+                                self.obstacle_avoid_distance = s_obstacle_avoid_distance
+                        except Exception as e:
+                            print({'error': e})
                     if self.height_setting_data.get('max_pwm'):
                         s_max_pwm = int(self.height_setting_data.get('max_pwm'))
                         if s_max_pwm >= 2000:
@@ -592,7 +600,6 @@ class MqttSendGet:
                                 self.base_setting_data = copy.deepcopy(self.base_setting_default_data)
                                 json.dump(self.base_setting_data, f)
                         config.update_base_setting()
-
             # 高级配置
             elif topic == 'height_setting_%s' % self.ship_code:
                 self.logger.info({'height_setting_data': json.loads(msg.payload)})
@@ -648,6 +655,13 @@ class MqttSendGet:
                                     self.obstacle_avoid_type = s_obstacle_avoid_type
                                 except Exception as e:
                                     print({'error': e})
+                            if self.height_setting_data.get('obstacle_avoid_distance') is not None:
+                                try:
+                                    s_obstacle_avoid_distance = int(height_setting_data.get('obstacle_avoid_distance'))
+                                    if 1 < s_obstacle_avoid_distance < 50:
+                                        self.obstacle_avoid_distance = s_obstacle_avoid_distance
+                                except Exception as e:
+                                    print({'error': e})
                         config.update_height_setting()
                     # 恢复默认配置
                     elif info_type == 4:
@@ -701,10 +715,10 @@ class MqttSendGet:
                 self.logger.info({'topic': topic,
                                   'poweroff_restart': poweroff_restart_data.get('poweroff_restart'),
                                   })
-                if poweroff_restart_type == 2:
-                    poweroff_restart.restart()
-                elif poweroff_restart_type == 1:
-                    poweroff_restart.poweroff()
+                # if poweroff_restart_type == 2:
+                #     poweroff_restart.restart()
+                # elif poweroff_restart_type == 1:
+                #     poweroff_restart.poweroff()
 
             # 距离岸边距离话题
             elif topic == 'bank_distance_%s' % self.ship_code:

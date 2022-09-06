@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import gaode_keys
+
 root_path = os.path.dirname(os.path.abspath(__file__))
 maps_dir = os.path.join(root_path, 'statics', 'mapsData')
 if not os.path.exists(os.path.join(root_path, 'statics')):
@@ -43,6 +44,7 @@ class ShipType(enum.Enum):
 
 # 船号对应类型
 ship_code_type_dict = {
+    'XXLJC4LCGSCSD1DA002': ShipType.multi_draw_detect,  # 测试黑船
     'XXLJC4LCGSCSD1DA003': ShipType.water_detect,
     'XXLJC4LCGSCSD1DA004': ShipType.multi_draw,
     'XXLJC4LCGSCSD1DA005': ShipType.water_detect,
@@ -78,7 +80,7 @@ print('current_platform', current_platform)
 # 百度地图key
 baidu_key = 'wIt2mDCMGWRIi2pioR8GZnfrhSKQHzLY'
 # 高德秘钥
-init_key_index=2
+init_key_index = 2
 gaode_key = gaode_keys.key_lists[init_key_index]
 # 腾讯地图key
 tencent_key = 'PSABZ-URMWP-3ATDK-VBRCR-FBBMF-YHFCE'
